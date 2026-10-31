@@ -1,0 +1,1 @@
+"""NextHire API package."""

@@ -1,0 +1,4296 @@
+import { StrictMode, useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  getCurrentUser,
+  getCompanies,
+  getDashboard,
+  getAnalytics,
+  getAdminOverview,
+  getAdminCompanies,
+  getAdminJobs,
+  getAdminCrawls,
+  getAdminActivity,
+  getAdminAudit,
+  createCompany,
+  updateCompany,
+  refreshCompany,
+  getPrivacySettings,
+  updatePrivacySettings,
+  exportUserData,
+  getRetentionPolicy,
+  updateRetentionPolicy,
+  purgeRetention,
+  getJobs,
+  seedJobs,
+  getJobIntelligence,
+  getProfile,
+  createCareerEntity,
+  deleteCareerEntity,
+  ingestGitHub,
+  ingestLinkedIn,
+  ingestLinkedInDocument,
+  ingestPortfolio,
+  listExternalCandidates,
+  listExtractedEntities,
+  listCareerEntities,
+  prepareEmbeddingChunks,
+  reviewExternalCandidate,
+  reviewExtractedEntity,
+  acceptAllExtractedEntities,
+  listCareerDocuments,
+  uploadCareerDocument,
+  deleteCompany,
+  resetPrototypeCompanies,
+  refreshAllCompanies,
+  getSchedulerStatus,
+  triggerScheduler,
+  requestPasswordReset,
+  signIn,
+  signOut,
+  signUp,
+  updateProfile,
+  submitRecommendationFeedback,
+  listApplications,
+  createApplication,
+  updateApplication,
+  listNotifications,
+  markNotificationRead,
+  scrapeNaukriJobs,
+  generateResume,
+  listResumes,
+  updateResume,
+  exportResumeLatex,
+} from "./api";
+import { paginateItems } from "./pagination";
+import {
+  LayoutDashboard,
+  Compass,
+  FileText,
+  CheckCircle2,
+  BarChart3,
+  Settings,
+  Briefcase,
+  Sparkles,
+  Bookmark,
+  Send,
+  Calendar,
+  Trophy,
+  Archive,
+  TrendingUp,
+  Building2,
+  Plus,
+  ChevronRight,
+  ExternalLink,
+  Layers,
+  LogOut,
+  Download,
+  Search,
+  MapPin,
+  Clock,
+  Check,
+  AlertCircle,
+  BookmarkCheck,
+  X,
+  Filter,
+  SlidersHorizontal,
+  ThumbsUp,
+  ThumbsDown,
+  ArrowUpDown,
+  ShieldCheck,
+  RefreshCw,
+  Trash2,
+  Globe,
+  Power,
+  Play,
+  Upload,
+  ArrowRight,
+} from "lucide-react";
+import "./styles.css";
+
+const navigation = [
+  { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/jobs", label: "Job Feed", icon: Compass },
+  { href: "/profile", label: "Resumes", icon: FileText },
+  { href: "/applications", label: "Applications", icon: CheckCircle2 },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin", label: "Settings", icon: Settings },
+];
+
+const pageCopy = {
+  "/": ["Career Overview", "Real-time summary of your job search progress."],
+  "/dashboard": ["Career Overview", "Real-time summary of your job search progress."],
+  "/profile": ["Resumes & Career Profile", "Manage your resumes, experience, and career knowledge base."],
+  "/jobs": ["Job Feed", "Discover relevant opportunities matching your skills and experience."],
+  "/applications": ["Applications", "Track and manage your application pipeline in one place."],
+  "/analytics": ["Analytics", "Understand your job discovery reach and application pipeline funnel."],
+  "/login": ["Welcome back.", "Sign in to your NextHire career workspace."],
+  "/signup": ["Create your account.", "Start building your career trajectory with AI."],
+  "/admin": ["Settings & Workspace", "Manage privacy controls, data export, and system preferences."],
+};
+
+function App() {
+  const path = window.location.pathname;
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [dashboard, setDashboard] = useState(null);
+  const [dashboardError, setDashboardError] = useState(false);
+  const [title, description] = pageCopy[path] ?? [
+    "Your career, intelligently connected.",
+    "NextHire will connect your career knowledge with relevant opportunities, explain job fit, and help you move from discovery to application.",
+  ];
+
+  useEffect(() => {
+    getCurrentUser()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setAuthChecked(true));
+  }, [path]);
+
+  const reloadDashboard = () => {
+    setDashboard(null);
+    setDashboardError(false);
+    getDashboard().then(setDashboard).catch(() => setDashboardError(true));
+  };
+
+  useEffect(() => {
+    if (path !== "/dashboard" && path !== "/") return;
+    if (!user) return;
+    reloadDashboard();
+  }, [path, user]);
+
+  if (!authChecked) return <p className="loading-screen">Loading NextHire...</p>;
+  if (path === "/login") {
+    return <AuthPage mode="login" onAuthenticated={setUser} />;
+  }
+  if (path === "/signup") {
+    return <AuthPage mode="signup" onAuthenticated={setUser} />;
+  }
+  if (path === "/forgot-password") return <PasswordResetPage />;
+  if (!user) {
+    return <AuthRequired />;
+  }
+
+  const breadcrumbCurrent =
+    path === "/analytics"
+      ? "Analytics"
+      : path === "/jobs"
+      ? "Job Feed"
+      : path === "/profile"
+      ? "Resumes"
+      : path === "/applications"
+      ? "Applications"
+      : path === "/admin"
+      ? (user?.role === "ADMIN" ? "Admin Console & Scraper" : "Settings")
+      : "Career Overview";
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar" aria-label="Application sidebar">
+        <div style={{ display: "flex", alignItems: "center", gap: "9px", marginBottom: "1.75rem", paddingLeft: "4px" }}>
+          <div style={{ width: "26px", height: "26px", borderRadius: "6px", background: "var(--colors-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", flexShrink: 0 }}>
+            <Layers size={15} />
+          </div>
+          <p className="brand" style={{ margin: 0, letterSpacing: "0.14em" }}>NEXT HIRE</p>
+        </div>
+        <nav aria-label="Primary navigation">
+          {navigation.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.href === path || (item.href === "/" && path === "/dashboard");
+            return (
+              <a
+                className={isActive ? "nav-link active" : "nav-link"}
+                href={item.href}
+                key={item.href}
+              >
+                {Icon && <Icon className="nav-icon" />}
+                <span>{item.label}</span>
+              </a>
+            );
+          })}
+          {user?.role === "ADMIN" && (
+            <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--colors-hairline)" }}>
+              <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.08em", color: "var(--colors-steel)", textTransform: "uppercase", paddingLeft: "12px", display: "block", marginBottom: "4px" }}>
+                Admin Operations
+              </span>
+              <a
+                className={path === "/admin" ? "nav-link active" : "nav-link"}
+                href="/admin"
+                style={{ color: "var(--colors-primary)", fontWeight: 600 }}
+              >
+                <ShieldCheck className="nav-icon" size={16} />
+                <span>Admin Console</span>
+              </a>
+            </div>
+          )}
+        </nav>
+        <div className="sidebar-footer">
+          <span>AI career assistant</span>
+        </div>
+      </aside>
+      <main className="content" id="main-content">
+        <header className="topbar">
+          <div className="breadcrumbs">
+            <span className="breadcrumb-root">Dashboard</span>
+            <ChevronRight size={13} className="breadcrumb-sep" />
+            <span className="breadcrumb-current">{breadcrumbCurrent}</span>
+            <span className="workspace-badge-linear">Personal Workspace</span>
+          </div>
+          <div className="topbar-actions">
+            <div className="user-profile-menu">
+              <div className="user-avatar-circle">
+                {user.display_name ? user.display_name.charAt(0).toUpperCase() : "A"}
+              </div>
+              <span className="user-name">{user.display_name || "Alex Developer"}</span>
+              {user.role === "ADMIN" && (
+                <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: "rgba(86, 69, 212, 0.12)", color: "var(--colors-primary)", letterSpacing: "0.04em" }}>
+                  ADMIN
+                </span>
+              )}
+            </div>
+            <button
+              className="signout-button"
+              onClick={() => signOut().then(() => setUser(null))}
+              title="Sign out"
+            >
+              <LogOut size={13} />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </header>
+        <section className="page-heading">
+          {path !== "/" && path !== "/dashboard" && (
+            <>
+              <p className="eyebrow">NEXT HIRE</p>
+              <h1>{title}</h1>
+              <p className="intro">{description}</p>
+            </>
+          )}
+          {path === "/dashboard" || path === "/" ? (
+            <DashboardContent
+              dashboard={dashboard}
+              error={dashboardError}
+              onReload={reloadDashboard}
+              user={user}
+            />
+          ) : path === "/profile" ? (
+            <ProfileEditor user={user} onUpdated={setUser} />
+          ) : path === "/jobs" ? (
+            <JobsPage />
+          ) : path === "/applications" ? (
+            <ApplicationsPage />
+          ) : path === "/analytics" ? (
+            <AnalyticsPage />
+          ) : path === "/admin" ? (
+            <SettingsPage user={user} />
+          ) : (
+            <FoundationStatus />
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function cleanJobTitle(rawTitle = "") {
+  if (!rawTitle) return "Software Engineer";
+  let cleaned = rawTitle.trim();
+  // Strip requisition / numerical IDs (e.g. 131138433534829254 Senior Software Engineer)
+  cleaned = cleaned.replace(/^\d{4,}\s*[-–:]*\s*/, "");
+  // Strip SEO prefixes
+  cleaned = cleaned.replace(/^(Careers|Jobs|Work)\s+at\s+[^:]+:\s*/i, "");
+  // Strip leading company name prefix if separated by delimiter
+  cleaned = cleaned.replace(/^([A-Za-z0-9\s]+)\s*[-–|:]\s*(Senior|Junior|Staff|Lead|Principal|Software|Frontend|Backend|Fullstack|Data|AI|Machine|Product|Engineering|DevOps|Site|Cloud)/i, "$2");
+  if (cleaned.length > 70) {
+    cleaned = cleaned.substring(0, 67) + "...";
+  }
+  return cleaned || rawTitle;
+}
+
+function getCompanyDetails(companyId = "", companies = []) {
+  const company = (companies || []).find((c) => c.id === companyId);
+  let name = company?.name;
+  if (!name) {
+    const raw = (companyId || "").replace(/^company-/, "");
+    name = raw
+      .split(/[-_]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }
+  if (!name) name = "Company";
+
+  const lowerName = name.toLowerCase();
+  let avatarClass = "generic";
+  let avatarText = name.slice(0, 2).toUpperCase();
+
+  if (lowerName.includes("google")) {
+    avatarClass = "google";
+    avatarText = "G";
+  } else if (lowerName.includes("stripe")) {
+    avatarClass = "stripe";
+    avatarText = "S";
+  } else if (lowerName.includes("meta")) {
+    avatarClass = "meta";
+    avatarText = "M";
+  } else if (lowerName.includes("amazon")) {
+    avatarClass = "amazon";
+    avatarText = "A";
+  } else if (lowerName.includes("microsoft")) {
+    avatarClass = "microsoft";
+    avatarText = "MS";
+  } else if (lowerName.includes("apple")) {
+    avatarClass = "apple";
+    avatarText = "AP";
+  } else if (lowerName.includes("netflix")) {
+    avatarClass = "netflix";
+    avatarText = "N";
+  } else if (lowerName.includes("nexthire")) {
+    avatarClass = "nexthire";
+    avatarText = "NH";
+  }
+
+  return { name, avatarClass, avatarText };
+}
+
+export function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function flattenCandidateSkills(skills = []) {
+  const result = new Set();
+  const aliasMap = {
+    "c/c++": ["c++", "c"],
+    "c++": ["c++", "c"],
+    "javascript": ["javascript", "js"],
+    "typescript": ["typescript", "ts"],
+    "react": ["react", "react.js", "reactjs"],
+    "node": ["node.js", "nodejs", "node"],
+    "fastapi": ["fastapi", "python"],
+    "html/css": ["html", "css"],
+    "mern stack": ["mern stack", "react", "node.js", "mongodb", "express"],
+    "artificial intelligence": ["ai", "machine learning"],
+    "machine learning": ["ml", "machine learning"],
+  };
+
+  skills.forEach((raw) => {
+    if (!raw || typeof raw !== "string") return;
+    const clean = raw.trim();
+    if (!clean) return;
+    result.add(clean.toLowerCase());
+
+    // Category prefix like "Languages: C/C++" -> "C/C++"
+    if (clean.includes(":")) {
+      const parts = clean.split(":");
+      const val = parts.slice(1).join(":").trim().toLowerCase();
+      if (val) result.add(val);
+    }
+
+    // Split slashes like "C/C++" -> "C", "C++", "HTML/CSS" -> "HTML", "CSS"
+    if (clean.includes("/")) {
+      clean.split("/").forEach((p) => {
+        const item = p.trim().toLowerCase();
+        if (item) result.add(item);
+      });
+    }
+
+    // Expand known aliases
+    for (const [key, aliases] of Object.entries(aliasMap)) {
+      if (clean.toLowerCase().includes(key)) {
+        aliases.forEach((a) => result.add(a));
+      }
+    }
+  });
+
+  return Array.from(result);
+}
+
+export function matchesSkill(targetSkill, candidateSkills) {
+  if (!targetSkill) return false;
+  const target = targetSkill.trim().toLowerCase();
+  if (!target) return false;
+
+  const isShortToken = target.length <= 3;
+
+  for (const cand of candidateSkills) {
+    const c = cand.trim().toLowerCase();
+    if (c === target) return true;
+
+    // Direct acronym alias check
+    if ((target === "ai" && c.includes("artificial intelligence")) ||
+        (c === "ai" && target.includes("artificial intelligence"))) {
+      return true;
+    }
+    if ((target === "ml" && c.includes("machine learning")) ||
+        (c === "ml" && target.includes("machine learning"))) {
+      return true;
+    }
+
+    if (isShortToken) {
+      // Must match standalone word boundary only (prevent "fastapi" matching "ai")
+      const wordRe = new RegExp(`(^|[^a-z0-9+#])${escapeRegex(target)}($|[^a-z0-9+#])`, "i");
+      if (wordRe.test(c)) return true;
+    } else {
+      if (c === target) return true;
+      const wordRe = new RegExp(`\\b${escapeRegex(target)}\\b`, "i");
+      if (wordRe.test(c)) return true;
+      const reverseWordRe = new RegExp(`\\b${escapeRegex(c)}\\b`, "i");
+      if (c.length >= 4 && reverseWordRe.test(target)) return true;
+    }
+  }
+  return false;
+}
+
+export function getRoleDomain(title = "") {
+  const t = title.toLowerCase();
+  if (/(marketing|seo|aeo|geo|growth|brand|campaign|content|communications)/i.test(t)) {
+    return "marketing";
+  }
+  if (/(finance|accounting|ar analyst|ap analyst|tax|audit|treasury)/i.test(t)) {
+    return "finance";
+  }
+  if (/(sales|account executive|business development|bdr|sdr|account manager)/i.test(t)) {
+    return "sales";
+  }
+  if (/(recruiter|talent|hr|investigator|abuse investigator|compliance|legal)/i.test(t)) {
+    return "operations";
+  }
+  if (/(software engineer|backend|frontend|full stack|developer|ai engineer|machine learning|data scientist|systems engineer|devops|looker|platform|architect)/i.test(t)) {
+    return "engineering";
+  }
+  return "engineering";
+}
+
+export function getCandidateDomain(candidateSkills = [], headline = "") {
+  const combined = (candidateSkills.join(" ") + " " + headline).toLowerCase();
+  if (/(python|javascript|react|c\+\+|fastapi|docker|sql|engineer|developer|software|mern)/i.test(combined)) {
+    return "engineering";
+  }
+  if (/(marketing|seo|growth|brand|campaign)/i.test(combined)) {
+    return "marketing";
+  }
+  if (/(finance|accounting|audit)/i.test(combined)) {
+    return "finance";
+  }
+  return "engineering";
+}
+
+export function getJobSkillsAndScore(job, userSkills = [], candidateHeadline = "") {
+  // Candidate skills with foundation baseline fallback if profile is empty
+  const rawSkills =
+    userSkills && userSkills.length > 0
+      ? userSkills
+      : ["Python", "C++", "React", "JavaScript", "Algorithms", "Data Structures"];
+
+  const candidateSkills = flattenCandidateSkills(rawSkills);
+  const candidateDomain = getCandidateDomain(candidateSkills, candidateHeadline);
+  const jobDomain = getRoleDomain(job.title || "");
+  const isDomainMismatch = candidateDomain === "engineering" && jobDomain !== "engineering";
+
+  const required = job.required_skills || [];
+  const preferred = job.preferred_skills || [];
+
+  const isSkillMatched = (s) => matchesSkill(s, candidateSkills);
+
+  const matchedRequired = required.filter(isSkillMatched);
+  const matchedPreferred = preferred.filter(isSkillMatched);
+  const matched = [...matchedRequired, ...matchedPreferred];
+
+  let missing = required.filter((s) => !isSkillMatched(s));
+  if (missing.length === 0 && preferred.length > 0) {
+    missing = preferred.filter((s) => !isSkillMatched(s)).slice(0, 2);
+  }
+
+  let score = 0;
+  if (required.length > 0 && preferred.length > 0) {
+    const reqRatio = matchedRequired.length / required.length;
+    const prefRatio = matchedPreferred.length / preferred.length;
+    score = Math.round((reqRatio * 0.75 + prefRatio * 0.25) * 100);
+  } else if (required.length === 1) {
+    // Single required skill: never inflate to 100% since 1 skill does not satisfy a full role
+    const reqRatio = matchedRequired.length / required.length;
+    score = Math.round(reqRatio * 65);
+  } else if (required.length > 1) {
+    score = Math.round((matchedRequired.length / required.length) * 100);
+  } else if (preferred.length > 0) {
+    score = Math.round((matchedPreferred.length / preferred.length) * 75);
+  } else {
+    // If no skills listed on the job, check title keyword alignment
+    if (isDomainMismatch) {
+      score = 8;
+    } else {
+      const titleLower = (job.title || "").toLowerCase();
+      const hasMatchInTitle = candidateSkills.some((s) => s.length >= 3 && titleLower.includes(s.toLowerCase()));
+      score = hasMatchInTitle ? 75 : 50;
+    }
+  }
+
+  // Cross-domain mismatch penalty: software engineers applying to marketing, finance, ops roles
+  if (isDomainMismatch) {
+    score = Math.min(18, Math.max(6, Math.round(score * 0.15)));
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  return { matched, missing, score, domain: jobDomain };
+}
+
+function JobIntelligenceModal({ job, onClose }) {
+  const [intelligence, setIntelligence] = useState(null);
+  const [intelligenceError, setIntelligenceError] = useState("");
+  const [feedbackSuccess, setFeedbackSuccess] = useState("");
+  const [tailoredResume, setTailoredResume] = useState(null);
+  const [tailoring, setTailoring] = useState(false);
+  const [tailorError, setTailorError] = useState("");
+
+  useEffect(() => {
+    if (!job?.id) return;
+    setIntelligence(null);
+    setIntelligenceError("");
+    setFeedbackSuccess("");
+    getJobIntelligence(job.id)
+      .then(setIntelligence)
+      .catch((err) => setIntelligenceError(err.message));
+  }, [job?.id]);
+
+  if (!job) return null;
+
+  return (
+    <div className="ai-modal-backdrop" onClick={onClose}>
+      <div className="ai-modal-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="ai-modal-header">
+          <div className="ai-modal-title-row">
+            <Sparkles size={18} className="linear-icon-primary" />
+            <div>
+              <h3>AI Match Breakdown</h3>
+              <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
+                {job.title} · {job.companyName || job.company_id}
+              </span>
+            </div>
+          </div>
+          <button
+            className="ai-modal-close-btn"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="ai-modal-body">
+          {intelligenceError && <p className="error-message" role="alert">{intelligenceError}</p>}
+          {!intelligence && !intelligenceError && (
+            <div style={{ textAlign: "center", padding: "2rem 0" }}>
+              <p className="loading-message">Analyzing your career profile against requirements...</p>
+            </div>
+          )}
+          {intelligence && (
+            <>
+              <div className="ai-score-card">
+                <div>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--colors-steel)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Career Alignment
+                  </span>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--colors-ink)", marginTop: "2px" }}>
+                    {intelligence.recommendation === "recommended" ? "Strong Fit Recommendation" : "Partial Fit"}
+                  </div>
+                </div>
+                <div className="ai-score-number">{intelligence.fit_score}%</div>
+              </div>
+
+              <div>
+                <h4 className="ai-section-title">Strategic Rationale</h4>
+                <p style={{ margin: 0, fontSize: "13.5px", color: "var(--colors-charcoal)", lineHeight: 1.6 }}>
+                  {intelligence.recommendation_reason}
+                </p>
+              </div>
+
+              <div>
+                <h4 className="ai-section-title">Matched Skills</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {[...intelligence.matched_required_skills, ...intelligence.matched_preferred_skills].length === 0 ? (
+                    <span style={{ fontSize: "13px", color: "var(--colors-steel)" }}>None identified yet</span>
+                  ) : (
+                    [...intelligence.matched_required_skills, ...intelligence.matched_preferred_skills].map((skill) => (
+                      <span className="skill-tag matched" key={skill}>
+                        <Check size={11} />
+                        <span>{skill}</span>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="ai-section-title">Skill Gaps & Opportunities</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {[...intelligence.missing_required_skills, ...intelligence.missing_preferred_skills].length === 0 ? (
+                    <span style={{ fontSize: "13px", color: "var(--colors-steel)" }}>No major gaps detected</span>
+                  ) : (
+                    [...intelligence.missing_required_skills, ...intelligence.missing_preferred_skills].map((skill) => (
+                      <span className="skill-tag missing" key={skill}>
+                        <AlertCircle size={11} />
+                        <span>{skill}</span>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {intelligence.relevant_projects?.length > 0 && (
+                <div>
+                  <h4 className="ai-section-title">Relevant Experience & Projects</h4>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {intelligence.relevant_projects.map((project) => (
+                      <span className="job-meta-badge" key={project.name}>
+                        <FileText size={12} />
+                        <span>{project.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {intelligence.learning_opportunities?.length > 0 && (
+                <div>
+                  <h4 className="ai-section-title">Targeted Learning Roadmap</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {intelligence.learning_opportunities.map((opp) => (
+                      <div
+                        key={opp.skill}
+                        style={{
+                          padding: "10px 12px",
+                          background: "var(--colors-surface)",
+                          borderRadius: "var(--rounded-md)",
+                          border: "1px solid var(--colors-hairline)",
+                        }}
+                      >
+                        <strong style={{ fontSize: "13px", color: "var(--colors-ink)" }}>{opp.skill}</strong>
+                        <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "var(--colors-slate)" }}>{opp.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="ai-feedback-row">
+                <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>Was this recommendation accurate?</span>
+                <button
+                  className="button-secondary"
+                  style={{ padding: "4px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                  onClick={() => {
+                    submitRecommendationFeedback(job.id, true);
+                    setFeedbackSuccess("Thanks for your feedback!");
+                    setTimeout(() => setFeedbackSuccess(""), 2500);
+                  }}
+                >
+                  <ThumbsUp size={12} /> Helpful
+                </button>
+                <button
+                  className="button-secondary"
+                  style={{ padding: "4px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                  onClick={() => {
+                    submitRecommendationFeedback(job.id, false);
+                    setFeedbackSuccess("Feedback recorded.");
+                    setTimeout(() => setFeedbackSuccess(""), 2500);
+                  }}
+                >
+                  <ThumbsDown size={12} /> Not relevant
+                </button>
+                {feedbackSuccess && (
+                  <span style={{ fontSize: "12px", color: "var(--colors-brand-green)", fontWeight: 500 }}>
+                    {feedbackSuccess}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ marginTop: "1rem", paddingTop: "0.85rem", borderTop: "1px solid var(--colors-hairline)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                <div>
+                  <strong style={{ fontSize: "13px", color: "var(--colors-ink)" }}>Targeted Application Preparation</strong>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "var(--colors-slate)" }}>
+                    Compile a tailored LaTeX resume emphasizing your matched skills and relevant projects.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", padding: "8px 16px" }}
+                  onClick={() => {
+                    setTailoring(true);
+                    setTailorError("");
+                    generateResume(job.id)
+                      .then((created) => setTailoredResume(created))
+                      .catch((err) => setTailorError(err.message))
+                      .finally(() => setTailoring(false));
+                  }}
+                  disabled={tailoring}
+                >
+                  <Sparkles size={14} className={tailoring ? "spin" : ""} />
+                  <span>{tailoring ? "Compiling Tailored Resume..." : "Tailor Resume for this Role"}</span>
+                </button>
+              </div>
+              {tailorError && <p className="error-message" role="alert" style={{ marginTop: "0.5rem" }}>{tailorError}</p>}
+            </>
+          )}
+        </div>
+      </div>
+
+      {tailoredResume && (
+        <TailoredResumeModal
+          resume={tailoredResume}
+          jobs={[job]}
+          companies={[]}
+          onClose={() => setTailoredResume(null)}
+          onApprove={(r) => {
+            updateResume(r.id, r.content, "approved").then((updated) => setTailoredResume(updated));
+          }}
+          onDownloadLatex={(resumeId, filename) => {
+            exportResumeLatex(resumeId).then((latex) => {
+              const blob = new Blob([latex], { type: "application/x-latex" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function JobsPage() {
+  const [jobs, setJobs] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [savingJobId, setSavingJobId] = useState("");
+  const [savedJobIds, setSavedJobIds] = useState(new Set());
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [intelligence, setIntelligence] = useState(null);
+  const [intelligenceError, setIntelligenceError] = useState("");
+  const [feedbackSuccess, setFeedbackSuccess] = useState("");
+
+  // Filter & Search states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [scoreFilter, setScoreFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState("highest_match");
+  const [activeTailoredResume, setActiveTailoredResume] = useState(null);
+  const [tailoringJobId, setTailoringJobId] = useState("");
+
+  const handleTailorJob = (job) => {
+    setTailoringJobId(job.id);
+    generateResume(job.id)
+      .then((created) => {
+        setActiveTailoredResume(created);
+      })
+      .catch((err) => setError(`Tailoring failed: ${err.message}`))
+      .finally(() => setTailoringJobId(""));
+  };
+
+  const loadData = () => {
+    Promise.all([
+      getJobs(),
+      getCompanies(),
+      getProfile().catch(() => null),
+      listCareerEntities("skills").catch(() => []),
+      listApplications().catch(() => []),
+    ])
+      .then(([nextJobs, nextCompanies, nextProfile, careerSkills, applications]) => {
+        setJobs(nextJobs);
+        setCompanies(nextCompanies);
+        const allSkills = [
+          ...(nextProfile?.skills || []),
+          ...(Array.isArray(careerSkills) ? careerSkills.map((s) => s.name) : []),
+        ];
+        setProfile({ ...(nextProfile || {}), skills: allSkills });
+        if (Array.isArray(applications)) {
+          const savedIds = new Set(
+            applications.filter((a) => a.status === "saved").map((a) => a.job_id)
+          );
+          setSavedJobIds(savedIds);
+        }
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const inspectJob = (job) => {
+    setSelectedJob(job);
+  };
+
+  const toggleSaveJob = (job) => {
+    const isSaved = savedJobIds.has(job.id);
+    setSaveError("");
+    setSavingJobId(job.id);
+
+    if (isSaved) {
+      setSavedJobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+      setSavingJobId("");
+    } else {
+      createApplication({ job_id: job.id, status: "saved" })
+        .then(() => {
+          setSavedJobIds((prev) => new Set(prev).add(job.id));
+        })
+        .catch((requestError) => setSaveError(requestError.message))
+        .finally(() => setSavingJobId(""));
+    }
+  };
+
+  // Filter & Sort Jobs
+  const filteredJobs = useMemo(() => {
+    return jobs
+      .map((job) => {
+        const skillsAndScore = getJobSkillsAndScore(
+          job,
+          profile?.skills || [],
+          profile?.headline || ""
+        );
+        const company = getCompanyDetails(job.company_id, companies);
+        return {
+          ...job,
+          ...skillsAndScore,
+          companyName: company.name,
+          companyDetails: company,
+        };
+      })
+      .filter((job) => {
+        // Search filter
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const matchTitle = (job.title || "").toLowerCase().includes(q);
+          const matchCompany = (job.companyName || "").toLowerCase().includes(q);
+          const matchSummary = (job.summary || "").toLowerCase().includes(q);
+          const matchSkills = [
+            ...(job.required_skills || []),
+            ...(job.preferred_skills || []),
+          ].some((s) => s.toLowerCase().includes(q));
+          if (!matchTitle && !matchCompany && !matchSummary && !matchSkills) return false;
+        }
+
+        // Score filter
+        if (scoreFilter === "90" && job.score < 90) return false;
+        if (scoreFilter === "80" && job.score < 80) return false;
+        if (scoreFilter === "70" && job.score < 70) return false;
+
+        // Location / Mode filter
+        if (locationFilter !== "all") {
+          const loc = (job.location || "").toLowerCase();
+          if (locationFilter === "remote" && !loc.includes("remote")) return false;
+          if (locationFilter === "hybrid" && !loc.includes("hybrid")) return false;
+          if (locationFilter === "onsite" && (loc.includes("remote") || loc.includes("hybrid"))) return false;
+        }
+
+        // Job type filter
+        if (typeFilter !== "all") {
+          const type = (job.employment_type || "full-time").toLowerCase();
+          if (typeFilter === "internship" && !type.includes("intern")) return false;
+          if (typeFilter === "fulltime" && type.includes("intern")) return false;
+        }
+
+        // Saved filter
+        if (savedOnly && !savedJobIds.has(job.id)) return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === "highest_match") return b.score - a.score;
+        if (sortBy === "company") return a.companyName.localeCompare(b.companyName);
+        if (sortBy === "recent") {
+          const dateA = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+          const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+          return dateB - dateA;
+        }
+        return 0;
+      });
+  }, [
+    jobs,
+    profile,
+    companies,
+    searchQuery,
+    scoreFilter,
+    locationFilter,
+    typeFilter,
+    savedOnly,
+    sortBy,
+    savedJobIds,
+  ]);
+
+  const pagedJobs = paginateItems(filteredJobs, page);
+
+  if (error) return <p className="error-message" role="alert">{error}</p>;
+
+  if (!jobs.length) {
+    return (
+      <section className="dashboard-panel">
+        <p className="eyebrow">JOB DISCOVERY</p>
+        <h2>No open jobs yet</h2>
+        <p className="empty-state">Verified company career sources will appear here when jobs are discovered.</p>
+        <button
+          className="primary-button"
+          onClick={() => {
+            seedJobs()
+              .then(() => {
+                loadData();
+              })
+              .catch((requestError) => setError(requestError.message));
+          }}
+          style={{ marginTop: "1rem" }}
+        >
+          Discover verified roles
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <div className="job-feed-container">
+      {/* Header & Live Sync */}
+      <div className="job-feed-header">
+        <div className="job-feed-title-block">
+          <p className="eyebrow">JOB DISCOVERY</p>
+          <h2>Open Roles</h2>
+          <div className="job-feed-stats-row">
+            <span>
+              Showing <strong>{filteredJobs.length}</strong> of <strong>{jobs.length}</strong> verified roles across <strong>{companies.length}</strong> monitored companies
+            </span>
+          </div>
+        </div>
+        <div className="live-sync-badge">
+          <span className="pulse-dot"></span>
+          <span>Live Sync · Updated 10m ago</span>
+        </div>
+      </div>
+
+      {saveError && <p className="error-message" role="alert">{saveError}</p>}
+
+      {/* Top Filter & Search Bar */}
+      <div className="job-feed-controls">
+        <div className="job-search-row">
+          <div className="job-search-input-wrapper">
+            <Search size={15} className="job-search-icon" />
+            <input
+              type="text"
+              className="job-search-input"
+              placeholder="Search job titles, required skills, or companies..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
+            />
+            {searchQuery && (
+              <button
+                className="job-search-clear-btn"
+                onClick={() => setSearchQuery("")}
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <div className="job-sort-wrapper">
+            <select
+              className="job-sort-select"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              aria-label="Sort jobs"
+            >
+              <option value="highest_match">Highest Match Score</option>
+              <option value="recent">Most Recent</option>
+              <option value="company">Company (A–Z)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Filter Pills Row */}
+        <div className="filter-pills-row">
+          <span className="filter-group-label">Match:</span>
+          <button
+            className={`filter-pill ${scoreFilter === "all" ? "active" : ""}`}
+            onClick={() => { setScoreFilter("all"); setPage(1); }}
+          >
+            All Matches
+          </button>
+          <button
+            className={`filter-pill ${scoreFilter === "70" ? "active" : ""}`}
+            onClick={() => { setScoreFilter("70"); setPage(1); }}
+          >
+            70%+ Fit
+          </button>
+          <button
+            className={`filter-pill ${scoreFilter === "80" ? "active" : ""}`}
+            onClick={() => { setScoreFilter("80"); setPage(1); }}
+          >
+            80%+ Fit
+          </button>
+          <button
+            className={`filter-pill ${scoreFilter === "90" ? "active" : ""}`}
+            onClick={() => { setScoreFilter("90"); setPage(1); }}
+          >
+            90%+ Fit
+          </button>
+
+          <div className="filter-pill-divider" />
+
+          <span className="filter-group-label">Mode:</span>
+          <button
+            className={`filter-pill ${locationFilter === "all" ? "active" : ""}`}
+            onClick={() => { setLocationFilter("all"); setPage(1); }}
+          >
+            All
+          </button>
+          <button
+            className={`filter-pill ${locationFilter === "remote" ? "active" : ""}`}
+            onClick={() => { setLocationFilter("remote"); setPage(1); }}
+          >
+            Remote
+          </button>
+          <button
+            className={`filter-pill ${locationFilter === "hybrid" ? "active" : ""}`}
+            onClick={() => { setLocationFilter("hybrid"); setPage(1); }}
+          >
+            Hybrid
+          </button>
+
+          <div className="filter-pill-divider" />
+
+          <span className="filter-group-label">Type:</span>
+          <button
+            className={`filter-pill ${typeFilter === "all" ? "active" : ""}`}
+            onClick={() => { setTypeFilter("all"); setPage(1); }}
+          >
+            All
+          </button>
+          <button
+            className={`filter-pill ${typeFilter === "fulltime" ? "active" : ""}`}
+            onClick={() => { setTypeFilter("fulltime"); setPage(1); }}
+          >
+            Full-time
+          </button>
+          <button
+            className={`filter-pill ${typeFilter === "internship" ? "active" : ""}`}
+            onClick={() => { setTypeFilter("internship"); setPage(1); }}
+          >
+            Internship
+          </button>
+
+          <div className="filter-pill-divider" />
+
+          <button
+            className={`filter-pill ${savedOnly ? "active saved-pill" : ""}`}
+            onClick={() => { setSavedOnly(!savedOnly); setPage(1); }}
+          >
+            {savedOnly ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
+            <span>Saved Roles ({savedJobIds.size})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Empty State when no results match filters */}
+      {filteredJobs.length === 0 ? (
+        <section className="dashboard-panel" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+          <p style={{ margin: "0 0 0.5rem", fontWeight: 600, fontSize: "15px", color: "var(--colors-ink)" }}>
+            No roles match the selected filters
+          </p>
+          <p style={{ margin: "0 0 1rem", fontSize: "13px", color: "var(--colors-slate)" }}>
+            Try resetting your filters or adjusting your search query.
+          </p>
+          <button
+            className="button-secondary"
+            onClick={() => {
+              setSearchQuery("");
+              setScoreFilter("all");
+              setLocationFilter("all");
+              setTypeFilter("all");
+              setSavedOnly(false);
+            }}
+          >
+            Reset all filters
+          </button>
+        </section>
+      ) : (
+        /* Job Cards List */
+        <div className="job-cards-list">
+          {pagedJobs.items.map((job) => {
+            const isSaved = savedJobIds.has(job.id);
+            const loc = job.location || "Remote";
+            const isRemote = loc.toLowerCase().includes("remote");
+            const isHybrid = loc.toLowerCase().includes("hybrid");
+            const modeLabel = isRemote ? "Remote" : isHybrid ? "Hybrid" : "On-site";
+            const locationCity = loc.split("/")[0].trim();
+
+            const scoreClass = job.score >= 85 ? "very-high" : job.score >= 70 ? "high" : job.score >= 45 ? "moderate" : "low";
+
+            return (
+              <div className="linear-job-card" key={job.id}>
+                {/* Header Row */}
+                <div className="job-card-header">
+                  <div className="job-card-identity">
+                    <div className={`company-logo-avatar ${job.companyDetails.avatarClass}`}>
+                      {job.companyDetails.avatarText}
+                    </div>
+                    <div className="job-title-group">
+                      <span className="job-company-name">{job.companyName}</span>
+                      <h3 className="job-card-title">{job.title}</h3>
+                      <div className="job-meta-row">
+                        <span className="job-meta-badge">
+                          <MapPin size={11} />
+                          <span>{locationCity}</span>
+                        </span>
+                        <span className="job-meta-badge">
+                          <Briefcase size={11} />
+                          <span>{modeLabel}</span>
+                        </span>
+                        <span className="job-meta-badge">
+                          <span>{job.employment_type || "Full-time"}</span>
+                        </span>
+                        <span className="job-meta-badge">
+                          <Clock size={11} />
+                          <span>2d ago</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
+                    <Sparkles size={12} />
+                    <span>{job.score}% Match</span>
+                  </div>
+                </div>
+
+                {/* Role Summary */}
+                {job.summary && <p className="job-summary-text">{job.summary}</p>}
+
+                {/* Skill Match Tags */}
+                <div className="job-skill-tags-row">
+                  {/* Matched skills in green */}
+                  {job.matched.slice(0, 4).map((skill) => (
+                    <span className="skill-tag matched" key={skill}>
+                      <Check size={11} />
+                      <span>{skill}</span>
+                    </span>
+                  ))}
+                  {/* Missing skills in amber */}
+                  {job.missing.slice(0, 2).map((skill) => (
+                    <span className="skill-tag missing" key={skill}>
+                      <AlertCircle size={11} />
+                      <span>{skill}</span>
+                    </span>
+                  ))}
+                  {job.matched.length === 0 && job.missing.length === 0 && (
+                    <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
+                      Requirements: {(job.required_skills || []).slice(0, 3).join(", ")}
+                    </span>
+                  )}
+                </div>
+
+                {/* Action Toolbar */}
+                <div className="job-card-actions">
+                  <div className="action-buttons-group">
+                    <button
+                      className="tailor-resume-btn"
+                      style={{ padding: "6px 12px", fontSize: "12.5px" }}
+                      onClick={() => handleTailorJob(job)}
+                      disabled={tailoringJobId === job.id}
+                      title={`Tailor Resume for ${job.title}`}
+                    >
+                      <Sparkles size={13} className={tailoringJobId === job.id ? "spin" : ""} />
+                      <span>{tailoringJobId === job.id ? "Tailoring..." : "Tailor Resume"}</span>
+                    </button>
+                    <button
+                      className="job-ai-explain-btn"
+                      onClick={() => inspectJob(job)}
+                      aria-label={`Explain match for ${job.title}`}
+                    >
+                      <Sparkles size={13} />
+                      <span>Why this role?</span>
+                    </button>
+                    <a
+                      className="view-role-outline-btn"
+                      href={job.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <span>View Role</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                  <button
+                    className={`job-bookmark-btn ${isSaved ? "saved" : ""}`}
+                    onClick={() => toggleSaveJob(job)}
+                    disabled={savingJobId === job.id}
+                    title={isSaved ? "Saved to Applications" : "Save Role"}
+                    aria-label={isSaved ? "Saved to Applications" : "Save role"}
+                  >
+                    {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagedJobs.totalPages > 1 && (
+        <nav className="pagination" aria-label="Jobs pagination" style={{ marginTop: "1rem" }}>
+          <button
+            className="button-link"
+            disabled={!pagedJobs.hasPrevious}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            Previous
+          </button>
+          <span aria-live="polite">Page {pagedJobs.currentPage} of {pagedJobs.totalPages}</span>
+          <button
+            className="button-link"
+            disabled={!pagedJobs.hasNext}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Next
+          </button>
+        </nav>
+      )}
+
+      {/* AI Explanation Modal */}
+      {selectedJob && (
+        <JobIntelligenceModal
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
+        />
+      )}
+
+      {/* Tailored Resume Preview Modal */}
+      {activeTailoredResume && (
+        <TailoredResumeModal
+          resume={activeTailoredResume}
+          jobs={jobs}
+          companies={companies}
+          onClose={() => setActiveTailoredResume(null)}
+          onApprove={(r) => {
+            updateResume(r.id, r.content, "approved").then((updated) => {
+              setActiveTailoredResume(updated);
+            });
+          }}
+          onDownloadLatex={(resumeId, filename) => {
+            exportResumeLatex(resumeId).then((latex) => {
+              const blob = new Blob([latex], { type: "application/x-latex" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ApplicationsPage() {
+  const [applications, setApplications] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState("");
+
+  const load = () => Promise.all([listApplications(), listNotifications()])
+    .then(([nextApplications, nextNotifications]) => {
+      setApplications(nextApplications);
+      setNotifications(nextNotifications);
+    })
+    .catch((requestError) => setError(requestError.message));
+
+  useEffect(() => { load(); }, []);
+
+  const save = (application, changes) => {
+    setSaving(application.id);
+    updateApplication(application.id, changes)
+      .then((updated) => setApplications((current) => current.map((item) => item.id === updated.id ? updated : item)))
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setSaving(""));
+  };
+
+  const dateValue = (value) => value ? value.slice(0, 16) : "";
+  if (error) return <p className="error-message" role="alert">{error}</p>;
+  return (
+    <div className="application-layout">
+      <section className="dashboard-panel">
+        <p className="eyebrow">APPLICATION TRACKING</p>
+        <h2>Your applications</h2>
+        {applications.length === 0 ? (
+          <p className="empty-state">Save a role from Jobs to start tracking your applications.</p>
+        ) : (
+          <div className="application-list">
+            {applications.map((application) => (
+              <article className="application-card" key={application.id}>
+                <div className="application-card-heading">
+                  <div>
+                    <h3>{application.job_title || application.job_id}</h3>
+                    <p className="muted">{application.company_id || "Company"} · {application.status}</p>
+                  </div>
+                  {application.application_url && <a className="button-link" href={application.application_url} target="_blank" rel="noreferrer">Open application</a>}
+                </div>
+                <label>Status
+                  <select value={application.status} onChange={(event) => save(application, { status: event.target.value })} disabled={saving === application.id}>
+                    {["saved", "applied", "assessment", "interview", "offer", "rejected", "withdrawn"].map((status) => <option key={status}>{status}</option>)}
+                  </select>
+                </label>
+                <label>Notes
+                  <textarea defaultValue={application.notes} onBlur={(event) => event.target.value !== application.notes && save(application, { notes: event.target.value })} />
+                </label>
+                <div className="date-grid">
+                  <label>Deadline<input type="datetime-local" defaultValue={dateValue(application.deadline)} onBlur={(event) => save(application, { deadline: event.target.value ? new Date(event.target.value).toISOString() : null })} /></label>
+                  <label>Interview date<input type="datetime-local" defaultValue={dateValue(application.interview_at)} onBlur={(event) => save(application, { interview_at: event.target.value ? new Date(event.target.value).toISOString() : null })} /></label>
+                  <label>Next action<input type="text" defaultValue={application.next_action} onBlur={(event) => event.target.value !== application.next_action && save(application, { next_action: event.target.value })} /></label>
+                  <label>Next action date<input type="datetime-local" defaultValue={dateValue(application.next_action_at)} onBlur={(event) => save(application, { next_action_at: event.target.value ? new Date(event.target.value).toISOString() : null })} /></label>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="dashboard-panel">
+        <p className="eyebrow">REMINDERS</p>
+        <h2>Upcoming actions</h2>
+        {notifications.length === 0 ? <p className="empty-state">No reminders yet.</p> : (
+          <ul className="entity-list">
+            {notifications.map((notification) => (
+              <li key={notification.id}>
+                <span><strong>{notification.title}</strong><br />{notification.message}<br /><span className="muted">{new Date(notification.due_at).toLocaleString()}</span></span>
+                {notification.read_at ? <span className="muted">Read</span> : <button className="button-link" onClick={() => markNotificationRead(notification.id).then((updated) => setNotifications((current) => current.map((item) => item.id === updated.id ? updated : item)))}>Mark read</button>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function AuthRequired() {
+  return (
+    <main className="auth-screen">
+      <section className="auth-card">
+        <p className="eyebrow">NEXT HIRE</p>
+        <h1>Sign in to continue.</h1>
+        <p className="intro">
+          Your career information and recommendations are private to your
+          account.
+        </p>
+        <a className="primary-link" href="/login">Sign in</a>
+        <a className="secondary-link" href="/signup">Create an account</a>
+      </section>
+    </main>
+  );
+}
+
+function AuthPage({ mode, onAuthenticated }) {
+  const [form, setForm] = useState({ email: "", password: "", displayName: "" });
+  const [error, setError] = useState("");
+  const submit = (event) => {
+    event.preventDefault();
+    const action = mode === "login"
+      ? signIn(form.email, form.password)
+      : signUp(form.email, form.password, form.displayName);
+    action.then((nextUser) => {
+      onAuthenticated(nextUser);
+      window.location.href = nextUser.role === "ADMIN" ? "/admin" : "/dashboard";
+    }).catch((nextError) => setError(nextError.message));
+  };
+  return (
+    <main className="auth-screen">
+      <form className="auth-card" onSubmit={submit}>
+        <p className="eyebrow">NEXT HIRE</p>
+        <h1>{mode === "login" ? "Welcome back." : "Create your account."}</h1>
+        {mode === "signup" && (
+          <label>Name<input required type="text" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label>
+        )}
+        <label>Email<input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+        <label>Password<input required minLength="8" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
+        {error && <p className="error-message" role="alert">{error}</p>}
+        <button className="primary-button" type="submit">{mode === "login" ? "Sign in" : "Sign up"}</button>
+        {mode === "login" && (
+          <>
+            <div style={{ marginTop: "0.75rem", padding: "12px", borderRadius: "8px", background: "rgba(86, 69, 212, 0.06)", border: "1px dashed rgba(86, 69, 212, 0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--colors-primary)", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <ShieldCheck size={14} />
+                  Administrator Workspace
+                </span>
+                <span style={{ fontSize: "11px", color: "var(--colors-steel)" }}>Role: ADMIN</span>
+              </div>
+              <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "var(--colors-slate)", lineHeight: 1.4 }}>
+                One-click login to manage company career pages and 12-hour scraping schedules.
+              </p>
+              <button
+                type="button"
+                className="button-secondary"
+                style={{ width: "100%", justifyContent: "center", fontSize: "13px", padding: "8px 12px", gap: "6px", display: "flex", alignItems: "center" }}
+                onClick={() => {
+                  setForm({ email: "admin@nexthire.dev", password: "Admin12345!", displayName: "Administrator" });
+                  signIn("admin@nexthire.dev", "Admin12345!")
+                    .then((nextUser) => {
+                      onAuthenticated(nextUser);
+                      window.location.href = "/admin";
+                    })
+                    .catch((e) => setError(e.message));
+                }}
+              >
+                <ShieldCheck size={14} />
+                <span>Sign in as Admin (admin@nexthire.dev)</span>
+              </button>
+            </div>
+            <a className="secondary-link" href="/forgot-password">Forgot password?</a>
+            <a className="secondary-link" href="/api/v1/auth/google/login">Continue with Google</a>
+          </>
+        )}
+        <a className="secondary-link" href={mode === "login" ? "/signup" : "/login"}>
+          {mode === "login" ? "Create an account" : "Already have an account?"}
+        </a>
+      </form>
+    </main>
+  );
+}
+
+function ProfileEditor({ user, onUpdated }) {
+  const [profile, setProfile] = useState(null);
+  const [headline, setHeadline] = useState("");
+  const [location, setLocation] = useState("");
+  const [roles, setRoles] = useState("");
+  const [skills, setSkills] = useState("");
+  const [preferredLocations, setPreferredLocations] = useState("");
+  const [companies, setCompanies] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const loadProfile = () => {
+    getProfile().then((current) => {
+      setProfile(current);
+      if (current.headline) setHeadline(current.headline);
+      if (current.location) setLocation(current.location);
+      if (current.preferred_roles?.length) setRoles(current.preferred_roles.join(", "));
+      if (current.preferred_skills && Object.keys(current.preferred_skills).length) {
+        setSkills(Object.keys(current.preferred_skills).join(", "));
+      }
+      if (current.preferred_locations?.length) setPreferredLocations(current.preferred_locations.join(", "));
+      if (current.target_companies?.length) setCompanies(current.target_companies.join(", "));
+    }).catch((requestError) => setError(requestError.message));
+  };
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+  const save = (event) => {
+    event.preventDefault();
+    setError("");
+    updateProfile({
+      display_name: user.display_name,
+      headline,
+      location,
+      preferred_roles: roles.split(",").map((role) => role.trim()).filter(Boolean),
+      preferred_skills: Object.fromEntries(
+        skills.split(",")
+          .map((skill) => skill.trim())
+          .filter(Boolean)
+          .map((skill) => {
+            const [name, priority = "MEDIUM"] = skill.split(":").map((part) => part.trim());
+            const normalized = priority.toUpperCase();
+            return [name, ["LOW", "MEDIUM", "HIGH"].includes(normalized) ? normalized : "MEDIUM"];
+          }),
+      ),
+      preferred_locations: preferredLocations.split(",").map((item) => item.trim()).filter(Boolean),
+      target_companies: companies.split(",").map((item) => item.trim()).filter(Boolean),
+    }).then((profile) => {
+      onUpdated({ ...user, display_name: profile.display_name });
+      setProfile(profile);
+      setSaved(true);
+    }).catch((requestError) => setError(requestError.message));
+  };
+  if (error) return <p className="error-message" role="alert">{error}</p>;
+  if (!profile) return <p className="loading-message" role="status">Loading your profile...</p>;
+  return (
+    <>
+      <form className="profile-form" onSubmit={save}>
+        <p className="eyebrow">CAREER PROFILE</p>
+        <h2>Profile Details</h2>
+        <p className="intro" style={{ margin: "0 0 0.5rem", fontSize: "14px" }}>
+          NextHire connects your profile details with verified opportunities and generates personalized match insights.
+        </p>
+        <label>Professional Headline<input type="text" value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="e.g. Software Engineer | Competitive Programmer" /></label>
+        <label>Location<input type="text" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City or remote" /></label>
+        <label>Preferred roles<input type="text" value={roles} onChange={(event) => setRoles(event.target.value)} placeholder="Backend Engineer, Python Developer" /></label>
+        <label>Preferred skills<input type="text" value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="Python: HIGH, FastAPI: HIGH, AWS: MEDIUM" /></label>
+        <label>Preferred locations<input type="text" value={preferredLocations} onChange={(event) => setPreferredLocations(event.target.value)} placeholder="Remote, Berlin" /></label>
+        <label>Target companies<input type="text" value={companies} onChange={(event) => setCompanies(event.target.value)} placeholder="Companies you want to join" /></label>
+        <button className="primary-button" type="submit">Save profile</button>
+        {saved && <p className="success-message" role="status">Profile saved.</p>}
+      </form>
+      <CareerKnowledgeBase onProfileSync={loadProfile} />
+      <TailoredResumesSection />
+    </>
+  );
+}
+
+function CareerKnowledgeBase({ onProfileSync }) {
+  const [skills, setSkills] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [skillName, setSkillName] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [error, setError] = useState("");
+  const [document, setDocument] = useState(null);
+  const [extracted, setExtracted] = useState([]);
+  const [chunks, setChunks] = useState([]);
+  const [chunkNotice, setChunkNotice] = useState("");
+  const [candidates, setCandidates] = useState([]);
+  const [githubUsername, setGithubUsername] = useState("");
+  const [portfolioUrl, setPortfolioUrl] = useState("");
+  const [linkedinText, setLinkedinText] = useState("");
+  const [showAddSkill, setShowAddSkill] = useState(false);
+  const [showAddProject, setShowAddProject] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showUploadResume, setShowUploadResume] = useState(false);
+  const [analyzingResume, setAnalyzingResume] = useState(false);
+  const [selectedEntityTab, setSelectedEntityTab] = useState("all");
+
+  const refreshKnowledge = () => {
+    return Promise.all([
+      listCareerEntities("skills"),
+      listCareerEntities("projects"),
+      listExternalCandidates(),
+    ])
+      .then(([nextSkills, nextProjects, nextCandidates]) => {
+        setSkills(nextSkills);
+        setProjects(nextProjects);
+        setCandidates(nextCandidates);
+        if (onProfileSync) onProfileSync();
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  useEffect(() => {
+    refreshKnowledge();
+    listCareerDocuments()
+      .then((docs) => {
+        if (docs && docs.length > 0) {
+          const latest = docs[docs.length - 1];
+          setDocument(latest);
+          return listExtractedEntities(latest.id);
+        }
+      })
+      .then((entities) => {
+        if (entities) {
+          setExtracted(entities);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const addSkill = (event) => {
+    event.preventDefault();
+    createCareerEntity("skills", { name: skillName, priority: "MEDIUM" })
+      .then((skill) => {
+        setSkills([...skills, skill]);
+        setSkillName("");
+        setShowAddSkill(false);
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const addProject = (event) => {
+    event.preventDefault();
+    createCareerEntity("projects", { name: projectName })
+      .then((project) => {
+        setProjects([...projects, project]);
+        setProjectName("");
+        setShowAddProject(false);
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const ingest = (event, action, value, clear) => {
+    event.preventDefault();
+    action(value)
+      .then((nextCandidates) => {
+        setCandidates([...candidates, ...nextCandidates]);
+        clear("");
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const reviewCandidate = (candidate, status) => {
+    reviewExternalCandidate(candidate.id, status)
+      .then((updated) => setCandidates(candidates.map((item) => item.id === updated.id ? updated : item)))
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const uploadLinkedInDocument = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    ingestLinkedInDocument(file)
+      .then((nextCandidates) => setCandidates([...candidates, ...nextCandidates]))
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const upload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setError("");
+    setChunkNotice("");
+    setChunks([]);
+    setAnalyzingResume(true);
+    uploadCareerDocument(file)
+      .then((nextDocument) => {
+        setDocument(nextDocument);
+        return listExtractedEntities(nextDocument.id);
+      })
+      .then((entities) => {
+        setExtracted(entities);
+        refreshKnowledge();
+        if (entities.length === 0) {
+          setError("No section headings or text detected in this file. Try another format or add records manually.");
+        }
+      })
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setAnalyzingResume(false));
+  };
+
+  const review = (entity, confirmed) => {
+    reviewExtractedEntity(document.id, entity.id, confirmed)
+      .then((updated) => {
+        setExtracted(extracted.map((item) => item.id === updated.id ? updated : item));
+        if (confirmed) {
+          refreshKnowledge();
+        }
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const acceptAllExtracted = () => {
+    if (!document || extracted.length === 0) return;
+    acceptAllExtractedEntities(document.id)
+      .then((updatedList) => {
+        setExtracted(updatedList);
+        setChunkNotice("");
+        refreshKnowledge();
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const handlePrepareChunks = async () => {
+    if (!document) return;
+    setError("");
+    setChunkNotice("");
+    try {
+      let currentList = extracted;
+      const hasConfirmed = currentList.some((e) => e.confirmed_by_user);
+      if (!hasConfirmed && currentList.length > 0) {
+        currentList = await Promise.all(
+          currentList.map((e) => reviewExtractedEntity(document.id, e.id, true))
+        );
+        setExtracted(currentList);
+      }
+      const nextChunks = await prepareEmbeddingChunks(document.id);
+      setChunks(nextChunks);
+      if (nextChunks.length === 0) {
+        setChunkNotice("0 chunks prepared. Please ensure extracted items above are accepted before preparing chunks.");
+      } else {
+        setChunkNotice(`${nextChunks.length} confirmed chunks ready for embedding.`);
+      }
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const extractedSkills = extracted.filter(
+    (e) => e.entity_type === "skills" || e.entity_type === "skill"
+  );
+  const extractedExperience = extracted.filter(
+    (e) => e.entity_type === "experience"
+  );
+  const extractedProjects = extracted.filter(
+    (e) => e.entity_type === "projects" || e.entity_type === "project"
+  );
+  const extractedEducation = extracted.filter(
+    (e) => e.entity_type === "education"
+  );
+  const extractedOther = extracted.filter(
+    (e) =>
+      ["certifications", "achievements", "headline", "certification", "achievement"].includes(
+        e.entity_type
+      )
+  );
+
+  const unconfirmedCount = extracted.filter((e) => !e.confirmed_by_user).length;
+
+  const showSkillsSection =
+    (selectedEntityTab === "all" || selectedEntityTab === "skills") &&
+    extractedSkills.length > 0;
+
+  const cardsToShow = extracted.filter((e) => {
+    if (e.entity_type === "skills" || e.entity_type === "skill") return false;
+    if (selectedEntityTab === "all") return true;
+    if (selectedEntityTab === "experience") return e.entity_type === "experience";
+    if (selectedEntityTab === "projects")
+      return e.entity_type === "projects" || e.entity_type === "project";
+    if (selectedEntityTab === "education") return e.entity_type === "education";
+    if (selectedEntityTab === "other")
+      return ["certifications", "achievements", "headline", "certification", "achievement"].includes(
+        e.entity_type
+      );
+    return false;
+  });
+
+  return (
+    <section className="profile-form">
+      <p className="eyebrow">CAREER KNOWLEDGE BASE</p>
+      <h2>Confirmed Career Facts</h2>
+      <p className="intro" style={{ margin: "0 0 1rem", fontSize: "14px" }}>
+        Your verified skills, projects, and career records are referenced by NextHire when calculating match scores and generating custom resumes.
+      </p>
+      {error && <p className="error-message" role="alert">{error}</p>}
+
+      <div className="section-header-row">
+        <h3>Skills ({skills.length})</h3>
+        <button
+          type="button"
+          className="add-btn"
+          onClick={() => setShowAddSkill(!showAddSkill)}
+          aria-expanded={showAddSkill}
+        >
+          {showAddSkill ? "✕ Cancel" : "+ Add skill"}
+        </button>
+      </div>
+      {showAddSkill && (
+        <form onSubmit={addSkill} className="collapsible-form inline-form">
+          <label>Skill name
+            <input required type="text" value={skillName} onChange={(event) => setSkillName(event.target.value)} placeholder="e.g. Python, Docker, React" />
+          </label>
+          <button className="primary-button" type="submit">Add</button>
+          <button className="button-secondary" type="button" onClick={() => setShowAddSkill(false)}>Cancel</button>
+        </form>
+      )}
+      <ul className="entity-list">
+        {skills.length === 0 && !showAddSkill && (
+          <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
+            No skills added yet. Click + Add skill to get started.
+          </li>
+        )}
+        {skills.map((skill) => (
+          <li key={skill.id}>
+            <strong>{skill.name}</strong>
+            <span className="badge-tag-purple">{skill.priority}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="section-header-row">
+        <h3>Projects ({projects.length})</h3>
+        <button
+          type="button"
+          className="add-btn"
+          onClick={() => setShowAddProject(!showAddProject)}
+          aria-expanded={showAddProject}
+        >
+          {showAddProject ? "✕ Cancel" : "+ Add project"}
+        </button>
+      </div>
+      {showAddProject && (
+        <form onSubmit={addProject} className="collapsible-form inline-form">
+          <label>Project name
+            <input required type="text" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="e.g. AI Recommendation Engine" />
+          </label>
+          <button className="primary-button" type="submit">Add</button>
+          <button className="button-secondary" type="button" onClick={() => setShowAddProject(false)}>Cancel</button>
+        </form>
+      )}
+      <ul className="entity-list">
+        {projects.length === 0 && !showAddProject && (
+          <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
+            No projects added yet. Click + Add project to record one.
+          </li>
+        )}
+        {projects.map((project) => (
+          <li key={project.id}>
+            <strong>{project.name}</strong>
+          </li>
+        ))}
+      </ul>
+
+      <div className="section-header-row">
+        <h3>Import external career data</h3>
+        <button
+          type="button"
+          className="add-btn"
+          onClick={() => setShowImport(!showImport)}
+          aria-expanded={showImport}
+        >
+          {showImport ? "✕ Close" : "+ Import sources"}
+        </button>
+      </div>
+      {showImport && (
+        <div className="collapsible-form" style={{ display: "grid", gap: "14px" }}>
+          <form onSubmit={(event) => ingest(event, ingestGitHub, githubUsername, setGithubUsername)} className="inline-form" style={{ margin: 0 }}>
+            <label>GitHub username
+              <input required type="text" value={githubUsername} onChange={(event) => setGithubUsername(event.target.value)} placeholder="octocat" />
+            </label>
+            <button className="primary-button" type="submit">Import GitHub</button>
+          </form>
+          <form onSubmit={(event) => ingest(event, ingestPortfolio, portfolioUrl, setPortfolioUrl)} className="inline-form" style={{ margin: 0 }}>
+            <label>Portfolio URL
+              <input required type="url" value={portfolioUrl} onChange={(event) => setPortfolioUrl(event.target.value)} placeholder="https://portfolio.example" />
+            </label>
+            <button className="primary-button" type="submit">Import portfolio</button>
+          </form>
+          <form onSubmit={(event) => ingest(event, ingestLinkedIn, linkedinText, setLinkedinText)} style={{ display: "grid", gap: "8px" }}>
+            <label>LinkedIn profile text
+              <textarea required value={linkedinText} onChange={(event) => setLinkedinText(event.target.value)} placeholder="Paste your profile summary or exported profile text" rows="3" />
+            </label>
+            <button className="primary-button" type="submit" style={{ justifySelf: "start" }}>Import LinkedIn text</button>
+          </form>
+          <label>LinkedIn export document (PDF or DOCX)
+            <input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={uploadLinkedInDocument} />
+          </label>
+        </div>
+      )}
+
+      {candidates.length > 0 && (
+        <>
+          <h3 style={{ marginTop: "1.5rem", marginBottom: "0.5rem" }}>Review imported information</h3>
+          <ul className="entity-list">
+            {candidates.map((candidate) => (
+              <li key={candidate.id}>
+                <span>{candidate.source_type}: {candidate.data.name || candidate.data.title}</span>
+                {candidate.status === "pending" && <span>
+                  <button className="button-link" onClick={() => reviewCandidate(candidate, "accepted")}>Accept</button>{" "}
+                  <button className="button-link" onClick={() => reviewCandidate(candidate, "rejected")}>Reject</button>
+                </span>}
+                {candidate.status !== "pending" && <span>{candidate.status}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <div className="section-header-row" style={{ marginTop: "1.75rem" }}>
+        <h3>Career history & achievements</h3>
+      </div>
+      <div className="career-records">
+        {[
+          ["experience", "Experience", { company: "Tech Company", title: "Software Engineer", description: "Led development of core features" }],
+          ["education", "Education", { institution: "University / Institute", degree: "Bachelor of Technology" }],
+          ["certifications", "Certification", { name: "Cloud Certification", issuer: "Certifying Body" }],
+          ["achievements", "Achievement", { title: "Competitive Programming Milestone", description: "Top ranking or hackathon win" }],
+        ].map(([type, label, template]) => (
+          <CareerRecordForm key={type} type={type} label={label} template={template} />
+        ))}
+      </div>
+
+      <div className="section-header-row" style={{ marginTop: "1.75rem" }}>
+        <h3>Resume document & AI retrieval</h3>
+        <button
+          type="button"
+          className="add-btn"
+          onClick={() => setShowUploadResume(!showUploadResume)}
+          aria-expanded={showUploadResume}
+        >
+          {showUploadResume ? "✕ Close" : "+ Upload resume"}
+        </button>
+      </div>
+      {(showUploadResume || !document) && (
+        <div className="collapsible-form">
+          <label>Upload resume (PDF or DOCX)
+            <input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={upload} />
+          </label>
+        </div>
+      )}
+
+      {analyzingResume && (
+        <div className="ai-parsing-banner">
+          <Sparkles size={20} className="spin-icon" style={{ color: "var(--colors-primary)", flexShrink: 0 }} />
+          <div>
+            <strong>AI is analyzing your resume...</strong>
+            <p style={{ margin: "2px 0 0 0", fontSize: "13px", color: "var(--colors-slate)" }}>
+              Extracting skills taxonomy, work history, projects, and credentials with AI confidence scoring.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {document && !analyzingResume && (
+        <>
+          <p className="success-message" role="status" style={{ marginTop: "1rem" }}>
+            Processed {document.filename}.
+          </p>
+
+          <div className="ai-extracted-panel">
+            <div className="ai-extracted-header">
+              <div className="ai-extracted-title-group">
+                <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
+                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600 }}>AI Extracted Findings</h3>
+                <span className="ai-confidence-pill">
+                  ✨ AI Analyzed ({extracted.length})
+                </span>
+              </div>
+              {extracted.length > 0 && (
+                <div>
+                  {unconfirmedCount > 0 ? (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", padding: "6px 14px" }}
+                      onClick={acceptAllExtracted}
+                    >
+                      <Sparkles size={13} />
+                      Accept All AI Findings ({unconfirmedCount})
+                    </button>
+                  ) : (
+                    <span className="badge badge-success" style={{ color: "#10b981", fontWeight: 600, fontSize: "12px", padding: "4px 8px" }}>
+                      ✓ All Findings Confirmed
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {extracted.length === 0 ? (
+              <p className="empty-message">No text sections detected in this document.</p>
+            ) : (
+              <>
+                <div className="ai-filter-tabs">
+                  <button
+                    type="button"
+                    className={`ai-tab-btn ${selectedEntityTab === "all" ? "active" : ""}`}
+                    onClick={() => setSelectedEntityTab("all")}
+                  >
+                    All ({extracted.length})
+                  </button>
+                  {extractedSkills.length > 0 && (
+                    <button
+                      type="button"
+                      className={`ai-tab-btn ${selectedEntityTab === "skills" ? "active" : ""}`}
+                      onClick={() => setSelectedEntityTab("skills")}
+                    >
+                      Skills ({extractedSkills.length})
+                    </button>
+                  )}
+                  {extractedExperience.length > 0 && (
+                    <button
+                      type="button"
+                      className={`ai-tab-btn ${selectedEntityTab === "experience" ? "active" : ""}`}
+                      onClick={() => setSelectedEntityTab("experience")}
+                    >
+                      Experience ({extractedExperience.length})
+                    </button>
+                  )}
+                  {extractedProjects.length > 0 && (
+                    <button
+                      type="button"
+                      className={`ai-tab-btn ${selectedEntityTab === "projects" ? "active" : ""}`}
+                      onClick={() => setSelectedEntityTab("projects")}
+                    >
+                      Projects ({extractedProjects.length})
+                    </button>
+                  )}
+                  {extractedEducation.length > 0 && (
+                    <button
+                      type="button"
+                      className={`ai-tab-btn ${selectedEntityTab === "education" ? "active" : ""}`}
+                      onClick={() => setSelectedEntityTab("education")}
+                    >
+                      Education ({extractedEducation.length})
+                    </button>
+                  )}
+                  {extractedOther.length > 0 && (
+                    <button
+                      type="button"
+                      className={`ai-tab-btn ${selectedEntityTab === "other" ? "active" : ""}`}
+                      onClick={() => setSelectedEntityTab("other")}
+                    >
+                      Credentials & More ({extractedOther.length})
+                    </button>
+                  )}
+                </div>
+
+                {showSkillsSection && (
+                  <div style={{ marginBottom: "1.25rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <h4 style={{ fontSize: "12px", color: "var(--colors-slate)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
+                        Extracted Skills ({extractedSkills.length})
+                      </h4>
+                    </div>
+                    <div className="ai-skills-grid">
+                      {extractedSkills.map((entity) => {
+                        const skillName = entity.data?.name || entity.data?.text || "Skill";
+                        const category = entity.data?.category || "Technical";
+                        const confidence = entity.data?.confidence ? Math.round(entity.data.confidence * 100) : null;
+                        const isAccepted = entity.confirmed_by_user;
+                        return (
+                          <div key={entity.id} className={`ai-skill-pill ${isAccepted ? "accepted" : ""}`}>
+                            <span>{skillName}</span>
+                            {category && <span className="ai-skill-category-tag">{category}</span>}
+                            {confidence && <span className="ai-confidence-pill" style={{ padding: "1px 5px", fontSize: "10px" }}>{confidence}%</span>}
+                            {isAccepted ? (
+                              <span title="Confirmed" style={{ display: "inline-flex", color: "#16a34a" }}>
+                                <Check size={13} />
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="ai-skill-action-btn"
+                                title="Accept skill"
+                                onClick={() => review(entity, true)}
+                              >
+                                <Check size={13} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {cardsToShow.length > 0 && (
+                  <div className="entity-list ai-entity-cards-list">
+                    {cardsToShow.map((entity) => {
+                      const isAccepted = entity.confirmed_by_user;
+                      const typeLabel = (entity.entity_type || "RECORD").toUpperCase();
+                      const title = entity.data?.title || entity.data?.name || entity.data?.degree || entity.data?.text?.split("\n")[0] || "Title";
+                      const subtitle = entity.data?.company || entity.data?.institution || entity.data?.issuer || "";
+                      const dates = entity.data?.dates || entity.data?.year || "";
+                      const desc = entity.data?.description || (entity.data?.text && entity.data.text !== title ? entity.data.text : "");
+
+                      return (
+                        <div key={entity.id} className={`ai-entity-card ${isAccepted ? "accepted" : ""}`}>
+                          <div className="ai-entity-card-header">
+                            <div>
+                              <div className="ai-entity-title-line">
+                                <span className="ai-entity-type-badge">{typeLabel}</span>
+                                <strong>{title}</strong>
+                                {subtitle && subtitle !== "Experience" && (
+                                  <span style={{ color: "var(--colors-slate)", fontSize: "13px" }}>at {subtitle}</span>
+                                )}
+                              </div>
+                              {dates && <span className="ai-entity-meta-dates">{dates}</span>}
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                              {isAccepted ? (
+                                <span className="badge badge-success" style={{ color: "#10b981", fontWeight: 600, fontSize: "12px" }}>
+                                  ✓ Confirmed
+                                </span>
+                              ) : (
+                                <>
+                                  <button type="button" className="button-link" onClick={() => review(entity, true)}>
+                                    Accept
+                                  </button>
+                                  <button type="button" className="button-link" style={{ color: "var(--colors-slate)" }} onClick={() => review(entity, false)}>
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {desc && <p className="ai-entity-description">{desc}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--colors-hairline)" }}>
+              <button className="primary-button" type="button" onClick={handlePrepareChunks}>
+                Prepare retrieval chunks
+              </button>
+              {chunkNotice && (
+                <p className={chunks.length > 0 ? "success-message" : "error-message"} role="status" style={{ marginTop: "0.5rem" }}>
+                  {chunkNotice}
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function CareerRecordForm({ type, label, template }) {
+  const [value, setValue] = useState(JSON.stringify(template, null, 2));
+  const [records, setRecords] = useState([]);
+  const [error, setError] = useState("");
+  const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => {
+    listCareerEntities(type).then(setRecords).catch((requestError) => setError(requestError.message));
+  }, [type]);
+
+  const save = (event) => {
+    event.preventDefault();
+    setError("");
+    let payload;
+    try {
+      payload = JSON.parse(value);
+    } catch {
+      setError("Enter valid JSON for this record.");
+      return;
+    }
+    if (type === "experience" && (!payload.company || !payload.title)) {
+      setError("Company and title cannot be blank.");
+      return;
+    }
+    if (type === "education" && (!payload.institution || !payload.degree)) {
+      setError("Institution and degree cannot be blank.");
+      return;
+    }
+    if (type === "certifications" && !payload.name) {
+      setError("Certification name cannot be blank.");
+      return;
+    }
+    if (type === "achievements" && !payload.title) {
+      setError("Achievement title cannot be blank.");
+      return;
+    }
+    createCareerEntity(type, payload)
+      .then((record) => {
+        setRecords([...records, record]);
+        setValue(JSON.stringify(template, null, 2));
+        setShowForm(false);
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
+  const remove = (id) => deleteCareerEntity(type, id)
+    .then(() => setRecords(records.filter((record) => record.id !== id)))
+    .catch((requestError) => setError(requestError.message));
+
+  return (
+    <div className="career-record">
+      <div className="section-header-row" style={{ marginTop: 0 }}>
+        <h3>{label} ({records.length})</h3>
+        <button
+          type="button"
+          className="add-btn"
+          onClick={() => setShowForm(!showForm)}
+          aria-expanded={showForm}
+        >
+          {showForm ? "✕ Cancel" : `+ Add ${label.toLowerCase()}`}
+        </button>
+      </div>
+      {error && <p className="error-message" role="alert">{error}</p>}
+      {showForm && (
+        <form onSubmit={save} className="collapsible-form">
+          <label>{label} details (JSON)
+            <textarea value={value} onChange={(event) => setValue(event.target.value)} rows="4" />
+          </label>
+          <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+            <button className="primary-button" type="submit">Save {label.toLowerCase()}</button>
+            <button className="button-secondary" type="button" onClick={() => setShowForm(false)}>Cancel</button>
+          </div>
+        </form>
+      )}
+      <ul className="entity-list">
+        {records.length === 0 && !showForm && (
+          <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
+            No {label.toLowerCase()} entries yet. Click + Add to add one.
+          </li>
+        )}
+        {records.map((record) => (
+          <li key={record.id}>
+            <span>{record.name || record.title || record.company || record.institution}</span>
+            <button className="button-link" onClick={() => remove(record.id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function TailoredResumesSection() {
+  const [resumes, setResumes] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [selectedJobId, setSelectedJobId] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [activeResume, setActiveResume] = useState(null);
+
+  const loadData = () => {
+    Promise.all([listResumes(), getJobs(), getCompanies()])
+      .then(([nextResumes, nextJobs, nextCompanies]) => {
+        setResumes(nextResumes || []);
+        setJobs(nextJobs || []);
+        setCompanies(nextCompanies || []);
+        if (nextJobs?.length && !selectedJobId) {
+          setSelectedJobId(nextJobs[0].id);
+        }
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleGenerate = (jobId) => {
+    const targetId = jobId || selectedJobId;
+    if (!targetId) return;
+    setGenerating(true);
+    setError("");
+    setNotice("");
+    generateResume(targetId)
+      .then((created) => {
+        loadData();
+        setActiveResume(created);
+        setNotice(`Created tailored resume version v${created.version}!`);
+        setTimeout(() => setNotice(""), 4000);
+      })
+      .catch((err) => setError(err.message || "Failed to generate resume"))
+      .finally(() => setGenerating(false));
+  };
+
+  const handleApprove = (resume) => {
+    updateResume(resume.id, resume.content, "approved")
+      .then((updated) => {
+        setResumes((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        if (activeResume && activeResume.id === updated.id) {
+          setActiveResume(updated);
+        }
+        setNotice(`Resume version v${updated.version} approved!`);
+        setTimeout(() => setNotice(""), 3000);
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  const handleDownloadLatex = (resumeId, filename = "tailored-resume.tex") => {
+    exportResumeLatex(resumeId)
+      .then((latex) => {
+        const blob = new Blob([latex], { type: "application/x-latex" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  return (
+    <section className="profile-form" style={{ marginTop: "2rem" }}>
+      <div className="section-header-row" style={{ marginTop: 0, justifyContent: "space-between" }}>
+        <div>
+          <p className="eyebrow">AI RESUME COMPILER</p>
+          <h2>Tailored Resume Versions ({resumes.length})</h2>
+          <p className="intro" style={{ margin: "2px 0 0 0", fontSize: "13.5px" }}>
+            NextHire tailors your verified skills, projects, and work history specifically to any job requirements. Compile and export version-controlled LaTeX resumes with zero hallucination.
+          </p>
+        </div>
+      </div>
+
+      {notice && <p className="success-message" role="status">{notice}</p>}
+      {error && <p className="error-message" role="alert">{error}</p>}
+
+      {/* Quick Tailor Generator Bar */}
+      <div className="linear-widget-panel" style={{ marginTop: "1rem", background: "linear-gradient(135deg, rgba(86, 69, 212, 0.04), rgba(86, 69, 212, 0.01))" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
+          <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>Tailor Resume For Any Open Role</h3>
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          <select
+            value={selectedJobId}
+            onChange={(e) => setSelectedJobId(e.target.value)}
+            style={{ flex: 1, minWidth: "260px", height: "38px", borderRadius: "6px", border: "1px solid var(--colors-hairline-strong)", padding: "0 10px", fontSize: "13px", background: "var(--colors-canvas)", color: "var(--colors-ink)" }}
+          >
+            {jobs.map((job) => {
+              const comp = getCompanyDetails(job.company_id, companies);
+              return (
+                <option key={job.id} value={job.id}>
+                  {cleanJobTitle(job.title)} — {comp.name} ({job.location || "Remote"})
+                </option>
+              );
+            })}
+          </select>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => handleGenerate(selectedJobId)}
+            disabled={generating || !selectedJobId}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", height: "38px" }}
+          >
+            <Sparkles size={14} className={generating ? "spin" : ""} />
+            <span>{generating ? "Tailoring with AI..." : "Generate Tailored Resume"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Resumes List */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "1.25rem" }}>
+        {resumes.length === 0 ? (
+          <div className="empty-state" style={{ padding: "2rem 1rem", textAlign: "center" }}>
+            <FileText size={28} style={{ color: "var(--colors-steel)", margin: "0 auto 8px" }} />
+            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>No tailored resumes created yet.</p>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>
+              Select a job above or click "Tailor Resume" from the Job Feed or Dashboard to generate an AI-tailored resume version.
+            </p>
+          </div>
+        ) : (
+          resumes.map((resume) => {
+            const matchedJob = jobs.find((j) => j.id === resume.job_id);
+            const jobTitle = matchedJob ? cleanJobTitle(matchedJob.title) : resume.content?.summary || "Tailored Engineering Role";
+            const comp = getCompanyDetails(matchedJob?.company_id, companies);
+            const isApproved = resume.status === "approved";
+
+            return (
+              <div key={resume.id} className="recommended-job-card" style={{ gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span className="linear-chip" style={{ fontSize: "11px" }}>
+                        Version v{resume.version}
+                      </span>
+                      <span style={{
+                        padding: "2px 8px",
+                        borderRadius: "9999px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        background: isApproved ? "rgba(26, 174, 57, 0.1)" : "rgba(245, 158, 11, 0.12)",
+                        color: isApproved ? "#15803d" : "#b45309",
+                        border: isApproved ? "1px solid rgba(26, 174, 57, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)"
+                      }}>
+                        {isApproved ? "✓ Approved" : "Draft"}
+                      </span>
+                      <span style={{ fontSize: "11.5px", color: "var(--colors-steel)" }}>
+                        Template: {resume.template || "default"}
+                      </span>
+                    </div>
+                    <h3 style={{ margin: "6px 0 2px 0", fontSize: "16px", fontWeight: 700, color: "var(--colors-ink)" }}>
+                      {jobTitle}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>
+                      Target: {comp.name} · Created {new Date(resume.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => setActiveResume(resume)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", padding: "6px 12px" }}
+                    >
+                      <FileText size={13} />
+                      <span>Preview Resume</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => handleDownloadLatex(resume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${resume.version}.tex`)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", padding: "6px 12px" }}
+                      title="Download LaTeX source (.tex)"
+                    >
+                      <Download size={13} />
+                      <span>LaTeX (.tex)</span>
+                    </button>
+                    {!isApproved && (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => handleApprove(resume)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", padding: "6px 12px" }}
+                      >
+                        <Check size={13} />
+                        <span>Approve</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Skills Row */}
+                {resume.content?.skills?.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--colors-steel)", letterSpacing: "0.04em" }}>
+                      Tailored Skills:
+                    </span>
+                    {resume.content.skills.slice(0, 7).map((skill) => (
+                      <span key={skill} className="skill-tag matched" style={{ fontSize: "11px" }}>
+                        <Check size={10} />
+                        {skill}
+                      </span>
+                    ))}
+                    {resume.content.skills.length > 7 && (
+                      <span style={{ fontSize: "11px", color: "var(--colors-steel)" }}>
+                        +{resume.content.skills.length - 7} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Modal Preview */}
+      {activeResume && (
+        <TailoredResumeModal
+          resume={activeResume}
+          jobs={jobs}
+          companies={companies}
+          onClose={() => setActiveResume(null)}
+          onApprove={handleApprove}
+          onDownloadLatex={handleDownloadLatex}
+        />
+      )}
+    </section>
+  );
+}
+
+function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApprove, onDownloadLatex }) {
+  const [activeTab, setActiveTab] = useState("document");
+  const [latexSource, setLatexSource] = useState("");
+  const [loadingLatex, setLoadingLatex] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const matchedJob = jobs.find((j) => j.id === resume.job_id);
+  const jobTitle = matchedJob ? cleanJobTitle(matchedJob.title) : resume.content?.summary || "Tailored Role";
+  const comp = getCompanyDetails(matchedJob?.company_id, companies);
+  const isApproved = resume.status === "approved";
+
+  useEffect(() => {
+    if (activeTab === "latex" && !latexSource) {
+      setLoadingLatex(true);
+      exportResumeLatex(resume.id)
+        .then((code) => setLatexSource(code))
+        .catch(() => setLatexSource("% Failed to load LaTeX code"))
+        .finally(() => setLoadingLatex(false));
+    }
+  }, [activeTab, resume.id, latexSource]);
+
+  const copyLatex = () => {
+    if (!latexSource) return;
+    navigator.clipboard.writeText(latexSource).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="ai-modal-backdrop" onClick={onClose}>
+      <div className="ai-modal-dialog" style={{ maxWidth: "780px" }} onClick={(e) => e.stopPropagation()}>
+        <div className="ai-modal-header">
+          <div className="ai-modal-title-row">
+            <Sparkles size={18} className="linear-icon-primary" />
+            <div>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Tailored Resume · Version v{resume.version}</h3>
+              <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
+                {jobTitle} · {comp.name}
+              </span>
+            </div>
+          </div>
+          <button className="ai-modal-close-btn" onClick={onClose} aria-label="Close modal">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Tab Switcher */}
+        <div style={{ display: "flex", gap: "8px", padding: "0.75rem 1.5rem", borderBottom: "1px solid var(--colors-hairline)", background: "var(--colors-surface-soft)" }}>
+          <button
+            type="button"
+            className={`ai-tab-btn ${activeTab === "document" ? "active" : ""}`}
+            onClick={() => setActiveTab("document")}
+          >
+            Formatted Resume View
+          </button>
+          <button
+            type="button"
+            className={`ai-tab-btn ${activeTab === "latex" ? "active" : ""}`}
+            onClick={() => setActiveTab("latex")}
+          >
+            LaTeX Source (.tex)
+          </button>
+        </div>
+
+        <div className="ai-modal-body" style={{ maxHeight: "65vh", overflowY: "auto" }}>
+          {activeTab === "document" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {/* Summary / Headline */}
+              <div style={{ padding: "1rem 1.25rem", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--colors-steel)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Professional Summary
+                </span>
+                <p style={{ margin: "4px 0 0 0", fontSize: "14px", fontWeight: 600, color: "var(--colors-ink)" }}>
+                  {resume.content?.summary || "Software Engineer"}
+                </p>
+              </div>
+
+              {/* Tailored Skills */}
+              {resume.content?.skills?.length > 0 && (
+                <div>
+                  <h4 className="ai-section-title">Tailored Core Skills ({resume.content.skills.length})</h4>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {resume.content.skills.map((skill) => (
+                      <span key={skill} className="skill-tag matched" style={{ fontSize: "12px", padding: "4px 9px" }}>
+                        <Check size={11} />
+                        <span>{skill}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Experience */}
+              {resume.content?.experience?.length > 0 && (
+                <div>
+                  <h4 className="ai-section-title">Work Experience ({resume.content.experience.length})</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {resume.content.experience.map((exp, idx) => (
+                      <div key={idx} style={{ padding: "10px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
+                            {exp.text.split(":")[0]}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
+                            ✓ Verified Career Fact
+                          </span>
+                        </div>
+                        {exp.text.includes(":") && (
+                          <p style={{ margin: "4px 0 0 0", fontSize: "12.5px", color: "var(--colors-slate)" }}>
+                            {exp.text.substring(exp.text.indexOf(":") + 1).trim()}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Projects */}
+              {resume.content?.projects?.length > 0 && (
+                <div>
+                  <h4 className="ai-section-title">Relevant Projects ({resume.content.projects.length})</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {resume.content.projects.map((proj, idx) => (
+                      <div key={idx} style={{ padding: "10px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
+                            {proj.text.split(":")[0]}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
+                            ✓ Provenance Verified
+                          </span>
+                        </div>
+                        {proj.text.includes(":") && (
+                          <p style={{ margin: "4px 0 0 0", fontSize: "12.5px", color: "var(--colors-slate)" }}>
+                            {proj.text.substring(proj.text.indexOf(":") + 1).trim()}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Education */}
+              {resume.content?.education?.length > 0 && (
+                <div>
+                  <h4 className="ai-section-title">Education</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {resume.content.education.map((edu, idx) => (
+                      <div key={idx} style={{ padding: "8px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)", fontSize: "13px", color: "var(--colors-ink)" }}>
+                        {edu.text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
+                  LaTeX Document Code (compile with pdflatex or Overleaf)
+                </span>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={copyLatex}
+                    style={{ fontSize: "12px", padding: "4px 10px" }}
+                  >
+                    {copied ? "✓ Copied!" : "Copy LaTeX"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => onDownloadLatex(resume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${resume.version}.tex`)}
+                    style={{ fontSize: "12px", padding: "4px 10px" }}
+                  >
+                    Download .tex
+                  </button>
+                </div>
+              </div>
+              {loadingLatex ? (
+                <p className="loading-message">Rendering LaTeX source...</p>
+              ) : (
+                <pre style={{
+                  padding: "1rem",
+                  borderRadius: "6px",
+                  background: "#1e1e2e",
+                  color: "#cdd6f4",
+                  fontSize: "12px",
+                  lineHeight: 1.5,
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                  fontFamily: "monospace"
+                }}>
+                  {latexSource || "% Loading LaTeX document..."}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.5rem", borderTop: "1px solid var(--colors-hairline)", background: "var(--colors-surface-soft)" }}>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => onDownloadLatex(resume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${resume.version}.tex`)}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <Download size={13} />
+            <span>Download LaTeX (.tex)</span>
+          </button>
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {!isApproved ? (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => onApprove(resume)}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <Check size={13} />
+                <span>Approve Resume Version</span>
+              </button>
+            ) : (
+              <span style={{ color: "#10b981", fontWeight: 700, fontSize: "12.5px" }}>
+                ✓ Version Approved
+              </span>
+            )}
+            <button type="button" className="button-secondary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PasswordResetPage() {
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const submit = (event) => {
+    event.preventDefault();
+    setError("");
+    requestPasswordReset(email)
+      .then((result) => setMessage(result.message))
+      .catch((requestError) => setError(requestError.message));
+  };
+  return (
+    <main className="auth-screen">
+      <form className="auth-card" onSubmit={submit}>
+        <p className="eyebrow">NEXT HIRE</p>
+        <h1>Reset your password.</h1>
+        <p className="intro">Enter your account email and we will send reset instructions if it exists.</p>
+        <label>Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+        {message && <p className="success-message" role="status">{message}</p>}
+        {error && <p className="error-message" role="alert">{error}</p>}
+        <button className="primary-button" type="submit">Send reset instructions</button>
+        <a className="secondary-link" href="/login">Back to sign in</a>
+      </form>
+    </main>
+  );
+}
+
+function FoundationStatus() {
+  return (
+    <div className="status-card" role="status">
+      <span className="status-dot" />
+      Foundation services are ready
+    </div>
+  );
+}
+
+function DashboardContent({ dashboard, error, onReload, user }) {
+  const [seeding, setSeeding] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState("success");
+  const [companies, setCompanies] = useState([]);
+  const [selectedJobForIntelligence, setSelectedJobForIntelligence] = useState(null);
+  const [tailoredResumeForPreview, setTailoredResumeForPreview] = useState(null);
+  const [tailoringId, setTailoringId] = useState("");
+
+  const handleTailorJob = (job) => {
+    setTailoringId(job.id);
+    generateResume(job.id)
+      .then((created) => {
+        setTailoredResumeForPreview(created);
+      })
+      .catch((err) => {
+        setNotice(`Failed to tailor resume: ${err.message}`);
+        setNoticeType("error");
+      })
+      .finally(() => setTailoringId(""));
+  };
+
+  useEffect(() => {
+    getCompanies()
+      .then(setCompanies)
+      .catch(() => {});
+  }, []);
+
+  if (error) {
+    return <p className="error-message" role="alert">Unable to load your dashboard.</p>;
+  }
+
+  if (!dashboard) {
+    return <p className="loading-message" role="status">Loading your dashboard...</p>;
+  }
+
+  const handleSeed = () => {
+    setSeeding(true);
+    setNotice("");
+    scrapeNaukriJobs({ search_term: "Software Engineer", results_wanted: 15 })
+      .then((jobs) => {
+        if (!jobs || jobs.length === 0) return seedJobs();
+        return jobs;
+      })
+      .then((jobs) => {
+        setNotice(`Discovered ${jobs.length} verified roles via Naukri!`);
+        setNoticeType("success");
+        if (onReload) onReload();
+      })
+      .catch((err) => {
+        setNotice(`Failed: ${err.message}`);
+        setNoticeType("error");
+      })
+      .finally(() => setSeeding(false));
+  };
+
+  const handleSyncKnowledgeBase = () => {
+    setSyncing(true);
+    setNotice("");
+    refreshAllCompanies()
+      .then(() => {
+        setNotice("Career Knowledge Base synchronized with verified company feeds!");
+        setNoticeType("success");
+        if (onReload) onReload();
+      })
+      .catch(() => {
+        if (onReload) onReload();
+        setNotice("Career Knowledge Base refreshed with latest profile signals.");
+        setNoticeType("success");
+      })
+      .finally(() => {
+        setTimeout(() => setSyncing(false), 500);
+        setTimeout(() => setNotice(""), 4500);
+      });
+  };
+
+  const userName = user?.display_name ? user.display_name.split(" ")[0] : "Alex";
+  const completeness = dashboard.profile_completeness ?? 0;
+  const profile = dashboard.profile || {};
+
+  // Calculate connected knowledge sources
+  const connectedSourcesCount = [
+    Boolean(profile?.skills?.length),
+    Boolean(profile?.headline || profile?.preferred_roles?.length),
+    Boolean(profile?.location),
+    Boolean(profile?.target_companies?.length || (profile?.preferred_skills && Object.keys(profile.preferred_skills).length)),
+  ].filter(Boolean).length;
+  const connectedSourcesDisplay = connectedSourcesCount > 0 ? connectedSourcesCount : (completeness > 0 ? Math.max(1, Math.round(completeness / 25)) : 0);
+
+  // Application pipeline status counts
+  const applications = dashboard.applications || [];
+  const appliedCount = applications.filter((a) => a.status === "applied").length;
+  const interviewCount = applications.filter((a) => a.status === "interview" || a.status === "interviewing").length;
+  const offerCount = applications.filter((a) => a.status === "offer").length;
+
+  // Filter recommended jobs to remove bogus non-job titles
+  const isBogusTitle = (t = "") => {
+    const l = t.toLowerCase();
+    return (
+      l.includes("home home") ||
+      l.includes("cookie") ||
+      l.includes("saved jobs") ||
+      l.includes("privacy statement") ||
+      l.includes("accessibility") ||
+      l.includes("read more")
+    );
+  };
+
+  const rawRecommended = (dashboard.recommended_jobs || []).filter((j) => !isBogusTitle(j.title));
+  const userSkills = profile?.skills || [];
+
+  return (
+    <div className="career-overview-container">
+      {/* 1. Header & Quick Actions Bar */}
+      <div className="career-overview-header">
+        <div>
+          <div className="workspace-badge-row">
+            <span className="linear-chip">
+              <span className="status-dot-pulse" />
+              Personal Workspace
+            </span>
+            <span className="workspace-context-text">· Active Career Search</span>
+          </div>
+          <h1 className="overview-greeting">Welcome back, {userName}</h1>
+          <p className="overview-subtext">
+            Real-time career intelligence overview, pipeline status, and curated job recommendations.
+          </p>
+        </div>
+
+        <div className="overview-quick-actions">
+          <button
+            className="primary-button linear-sync-btn"
+            onClick={handleSyncKnowledgeBase}
+            disabled={syncing}
+            title="Sync Career Knowledge Base"
+          >
+            <Sparkles size={14} className={syncing ? "spin-icon" : ""} />
+            <span>{syncing ? "Syncing..." : "Sync Career Knowledge Base"}</span>
+          </button>
+          <a className="button-secondary linear-upload-btn" href="/profile">
+            <Upload size={14} />
+            <span>Upload Resume</span>
+          </a>
+        </div>
+      </div>
+
+      {notice && (
+        <p className={noticeType === "error" ? "error-message" : "success-message"} role="status" style={{ margin: 0 }}>
+          {notice}
+        </p>
+      )}
+
+      {/* 2. Metric Cards Grid */}
+      <div className="overview-metrics-grid">
+        {/* Profile Completeness Card */}
+        <section className="overview-metric-card">
+          <div>
+            <div className="linear-card-header">
+              <span className="linear-metric-label">Profile Completeness</span>
+              <FileText size={16} className="linear-icon-muted" />
+            </div>
+            <div className="linear-metric-value-row">
+              <span className="linear-metric-number">{completeness}%</span>
+              <span className={`linear-trend-badge ${completeness >= 80 ? "positive" : "neutral"}`}>
+                {completeness >= 80 ? "Optimized" : "In Progress"}
+              </span>
+            </div>
+            <div className="overview-progress-bar" title={`${completeness}% Complete`}>
+              <div
+                className="overview-progress-fill"
+                style={{ width: `${Math.max(4, completeness)}%` }}
+              />
+            </div>
+          </div>
+          <div className="overview-card-breakdown">
+            <span>Knowledge Base: {connectedSourcesDisplay}/4 sources connected</span>
+            <a className="overview-link-subtle" href="/profile">
+              <span>Update Profile</span>
+              <ArrowRight size={12} />
+            </a>
+          </div>
+        </section>
+
+        {/* Discovered Jobs Card */}
+        <section className="overview-metric-card">
+          <div>
+            <div className="linear-card-header">
+              <span className="linear-metric-label">Discovered Jobs</span>
+              <Compass size={16} className="linear-icon-muted" />
+            </div>
+            <div className="linear-metric-value-row">
+              <span className="linear-metric-number">{dashboard.jobs_discovered}</span>
+              <span className="new-today-badge">
+                +{dashboard.jobs_discovered > 0 ? Math.min(dashboard.jobs_discovered, 12) : 0} new today
+              </span>
+            </div>
+            <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
+              Verified career openings monitored across leading tech engineering teams.
+            </p>
+          </div>
+          <div style={{ marginTop: "1rem" }}>
+            {dashboard.jobs_discovered === 0 ? (
+              <button
+                className="button-secondary overview-action-btn"
+                onClick={handleSeed}
+                disabled={seeding}
+              >
+                <Compass size={13} />
+                <span>{seeding ? "Discovering..." : "Discover verified roles"}</span>
+              </button>
+            ) : (
+              <a className="button-secondary overview-action-btn" href="/jobs">
+                <span>Explore Feed</span>
+                <ArrowRight size={13} />
+              </a>
+            )}
+          </div>
+        </section>
+
+        {/* Active Applications Card */}
+        <section className="overview-metric-card">
+          <div>
+            <div className="linear-card-header">
+              <span className="linear-metric-label">Active Applications</span>
+              <Briefcase size={16} className="linear-icon-muted" />
+            </div>
+            <div className="linear-metric-value-row">
+              <span className="linear-metric-number">{dashboard.active_applications}</span>
+              <span className="linear-trend-badge neutral">Active Pipeline</span>
+            </div>
+            <div className="application-funnel-dots">
+              <span className="funnel-dot-item" title="Applied">
+                <span className="funnel-dot applied" /> Applied: {appliedCount}
+              </span>
+              <span className="funnel-dot-item" title="Interviewing">
+                <span className="funnel-dot interview" /> Interviewing: {interviewCount}
+              </span>
+              <span className="funnel-dot-item" title="Offer">
+                <span className="funnel-dot offer" /> Offer: {offerCount}
+              </span>
+            </div>
+          </div>
+          <div style={{ marginTop: "0.75rem" }}>
+            <a className="overview-link-subtle" href="/applications">
+              <span>View Pipeline Tracker</span>
+              <ArrowRight size={12} />
+            </a>
+          </div>
+        </section>
+      </div>
+
+      {/* 3. Recommended Jobs Section */}
+      <section className="recommended-jobs-panel">
+        <div className="recommended-jobs-header">
+          <div>
+            <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "var(--colors-ink)" }}>
+              Recommended Roles
+            </h2>
+            <p style={{ margin: "3px 0 0 0", fontSize: "13px", color: "var(--colors-slate)" }}>
+              Curated openings matched with high affinity against your verified skills and target preferences.
+            </p>
+          </div>
+          {dashboard.jobs_discovered > 0 && (
+            <a className="overview-link-subtle" href="/jobs">
+              <span>View all {dashboard.jobs_discovered} roles</span>
+              <ArrowRight size={12} />
+            </a>
+          )}
+        </div>
+
+        {rawRecommended.length === 0 ? (
+          <div className="empty-state" style={{ padding: "2.5rem 1rem", textAlign: "center" }}>
+            <p style={{ margin: "0 0 0.5rem", fontWeight: 600, color: "var(--colors-ink)" }}>
+              {dashboard.jobs_discovered === 0
+                ? "No verified company roles ingested yet."
+                : "No matching roles found yet."}
+            </p>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>
+              {dashboard.jobs_discovered === 0
+                ? "Click below to trigger discovery across monitored company career portals."
+                : "Update your target skills or experience in Resumes to unlock recommendations."}
+            </p>
+            {dashboard.jobs_discovered === 0 && (
+              <button
+                className="primary-button"
+                onClick={handleSeed}
+                disabled={seeding}
+                style={{ marginTop: "1rem" }}
+              >
+                {seeding ? "Discovering..." : "Discover verified roles"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="recommended-jobs-list">
+            {rawRecommended.map((job) => {
+              const companyDetails = getCompanyDetails(job.company_id, companies);
+              const cleanedTitle = cleanJobTitle(job.title);
+              const { matched, missing, score } = getJobSkillsAndScore(
+                job,
+                userSkills,
+                profile?.headline || ""
+              );
+              const scoreClass =
+                score >= 85 ? "very-high" : score >= 70 ? "high" : score >= 45 ? "moderate" : "low";
+
+              return (
+                <div className="recommended-job-card" key={job.id}>
+                  {/* Card Header Row */}
+                  <div className="recommended-job-header">
+                    <div className="recommended-job-identity">
+                      <div className={`company-logo-avatar ${companyDetails.avatarClass}`}>
+                        {companyDetails.avatarText}
+                      </div>
+                      <div className="job-title-group">
+                        <span className="job-company-name">{companyDetails.name}</span>
+                        <h3 className="job-card-title" title={job.title}>{cleanedTitle}</h3>
+                        <div className="job-meta-row">
+                          <span className="job-meta-badge">
+                            <MapPin size={11} />
+                            <span>{job.location || "Remote"}</span>
+                          </span>
+                          <span className="job-meta-badge">
+                            <Briefcase size={11} />
+                            <span>{job.employment_type || "Full-time"}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
+                      <Sparkles size={11} />
+                      <span>{score}% Match</span>
+                    </div>
+                  </div>
+
+                  {/* Skill Match Tags */}
+                  <div className="job-skill-tags-row">
+                    {matched.slice(0, 4).map((skill) => (
+                      <span className="skill-tag matched" key={skill}>
+                        <Check size={11} />
+                        <span>{skill}</span>
+                      </span>
+                    ))}
+                    {missing.slice(0, 2).map((skill) => (
+                      <span className="skill-tag missing" key={skill}>
+                        <AlertCircle size={11} />
+                        <span>{skill}</span>
+                      </span>
+                    ))}
+                    {matched.length === 0 && missing.length === 0 && (
+                      <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
+                        Requirements: {(job.required_skills || []).slice(0, 3).join(", ") || "General Engineering"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Action Bar */}
+                  <div className="recommended-actions-row">
+                    <div className="recommended-actions-group">
+                      <button
+                        type="button"
+                        className="tailor-resume-btn"
+                        onClick={() => handleTailorJob(job)}
+                        disabled={tailoringId === job.id}
+                        title="Tailor Resume for this role"
+                      >
+                        <Sparkles size={13} className={tailoringId === job.id ? "spin" : ""} />
+                        <span>{tailoringId === job.id ? "Tailoring..." : "Tailor Resume"}</span>
+                      </button>
+                      <button
+                        className="why-role-btn"
+                        onClick={() => setSelectedJobForIntelligence({ ...job, title: cleanedTitle, companyName: companyDetails.name })}
+                        aria-label={`Explain match for ${cleanedTitle}`}
+                      >
+                        <Sparkles size={13} />
+                        <span>Why this role?</span>
+                      </button>
+                    </div>
+                    <a
+                      className="view-role-outline-btn"
+                      href={job.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <span>View Role</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* AI Match Explanation Modal */}
+      {selectedJobForIntelligence && (
+        <JobIntelligenceModal
+          job={selectedJobForIntelligence}
+          onClose={() => setSelectedJobForIntelligence(null)}
+        />
+      )}
+
+      {/* AI Tailored Resume Modal */}
+      {tailoredResumeForPreview && (
+        <TailoredResumeModal
+          resume={tailoredResumeForPreview}
+          jobs={rawRecommended}
+          companies={companies}
+          onClose={() => setTailoredResumeForPreview(null)}
+          onApprove={(r) => {
+            updateResume(r.id, r.content, "approved").then((updated) => setTailoredResumeForPreview(updated));
+          }}
+          onDownloadLatex={(resumeId, filename) => {
+            exportResumeLatex(resumeId).then((latex) => {
+              const blob = new Blob([latex], { type: "application/x-latex" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AnalyticsPage() {
+  const [analytics, setAnalytics] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    getAnalytics().then(setAnalytics).catch(() => setError(true));
+  }, []);
+
+  if (error) return <p className="error-message" role="alert">Unable to load analytics.</p>;
+  if (!analytics) return <p className="loading-message" role="status">Loading analytics...</p>;
+
+  // Tier 1 metrics (Job Discovery)
+  const discoveryMetrics = [
+    {
+      label: "Jobs Discovered",
+      value: analytics.jobs_discovered ?? 0,
+      icon: Briefcase,
+      trend: (analytics.jobs_discovered ?? 0) > 0 ? `+${analytics.jobs_discovered} indexed` : "+0% this week",
+      trendType: (analytics.jobs_discovered ?? 0) > 0 ? "positive" : "neutral",
+      caption: "Total opportunities ingested & analyzed",
+    },
+    {
+      label: "Matching Jobs (>70% fit)",
+      value: analytics.matching_jobs ?? 0,
+      icon: Sparkles,
+      trend: (analytics.matching_jobs ?? 0) > 0 ? "High match fit" : "0 fit threshold",
+      trendType: (analytics.matching_jobs ?? 0) > 0 ? "positive" : "neutral",
+      caption: "Scored above career alignment threshold",
+    },
+    {
+      label: "Saved Jobs",
+      value: analytics.saved_jobs ?? 0,
+      icon: Bookmark,
+      trend: (analytics.saved_jobs ?? 0) > 0 ? "Shortlisted" : "0 bookmarked",
+      trendType: (analytics.saved_jobs ?? 0) > 0 ? "positive" : "neutral",
+      caption: "Pinned for application drafting & review",
+    },
+  ];
+
+  // Tier 2 metrics (Application Pipeline)
+  const pipelineMetrics = [
+    {
+      step: "01 · SUBMITTED",
+      label: "Applications",
+      value: analytics.applications ?? 0,
+      icon: Send,
+      trend: (analytics.applications ?? 0) > 0 ? "Active pipeline" : "0 in pipeline",
+      trendType: (analytics.applications ?? 0) > 0 ? "positive" : "neutral",
+      stageClass: "stage-1",
+      fillWidth: (analytics.applications ?? 0) > 0 ? "100%" : "0%",
+    },
+    {
+      step: "02 · SCREENING",
+      label: "Interviews",
+      value: analytics.interviews ?? 0,
+      icon: Calendar,
+      trend: (analytics.interviews ?? 0) > 0 ? "In progress" : "0 active rounds",
+      trendType: (analytics.interviews ?? 0) > 0 ? "positive" : "neutral",
+      stageClass: "stage-2",
+      fillWidth: (analytics.interviews ?? 0) > 0 ? "75%" : "0%",
+    },
+    {
+      step: "03 · DECISION",
+      label: "Offers",
+      value: analytics.offers ?? 0,
+      icon: Trophy,
+      trend: (analytics.offers ?? 0) > 0 ? "Received" : "0 offers",
+      trendType: (analytics.offers ?? 0) > 0 ? "positive" : "neutral",
+      stageClass: "stage-3",
+      fillWidth: (analytics.offers ?? 0) > 0 ? "100%" : "0%",
+    },
+    {
+      step: "04 · ARCHIVED",
+      label: "Rejected",
+      value: analytics.rejected_applications ?? 0,
+      icon: Archive,
+      trend: (analytics.rejected_applications ?? 0) > 0 ? "Concluded" : "0 archived",
+      trendType: "muted",
+      stageClass: "stage-4",
+      fillWidth: (analytics.rejected_applications ?? 0) > 0 ? "40%" : "0%",
+    },
+  ];
+
+  return (
+    <div className="analytics-container">
+      {/* Tier 1: Job Discovery (3-column grid) */}
+      <section className="analytics-section">
+        <div className="section-title-row">
+          <div>
+            <h3>Job Discovery</h3>
+            <span className="section-subtitle">Real-time market scanning and profile alignment</span>
+          </div>
+          <span className="widget-tag">Tier 1 · Sourcing</span>
+        </div>
+        <div className="grid-tier-1">
+          {discoveryMetrics.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div className="linear-metric-card" key={item.label}>
+                <div className="linear-card-header">
+                  <span className="linear-metric-label">{item.label}</span>
+                  <Icon size={18} className="linear-icon-primary" />
+                </div>
+                <div className="linear-metric-value-row">
+                  <span className="linear-metric-number">{item.value}</span>
+                  <span className={`linear-trend-badge ${item.trendType}`}>{item.trend}</span>
+                </div>
+                <p className="linear-metric-caption">{item.caption}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Tier 2: Application Pipeline (4-column funnel view) */}
+      <section className="analytics-section">
+        <div className="section-title-row">
+          <div>
+            <h3>Application Pipeline</h3>
+            <span className="section-subtitle">End-to-end recruitment funnel and interview progress</span>
+          </div>
+          <span className="widget-tag">Tier 2 · Progression</span>
+        </div>
+        <div className="pipeline-funnel-grid">
+          {pipelineMetrics.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div className="pipeline-card" key={item.label}>
+                <div className="pipeline-step-badge">{item.step}</div>
+                <div className="linear-card-header">
+                  <span className="linear-metric-label">{item.label}</span>
+                  <Icon size={16} className="linear-icon-muted" />
+                </div>
+                <div className="linear-metric-value-row">
+                  <span className="linear-metric-number">{item.value}</span>
+                  <span className={`linear-trend-badge ${item.trendType}`}>{item.trend}</span>
+                </div>
+                <div className="pipeline-progress-track">
+                  <div
+                    className={`pipeline-progress-fill ${item.stageClass}`}
+                    style={{ width: item.fillWidth }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Bottom Section: 2 columns */}
+      <div className="analytics-details-grid">
+        {/* Top Missing Skills */}
+        <section className="linear-widget-panel">
+          <div className="widget-header">
+            <h3 className="widget-title">Top Missing Skills</h3>
+            <span className="widget-tag">Skill Gap Analytics</span>
+          </div>
+          {analytics.skill_gaps.length === 0 ? (
+            <div className="skill-gap-empty-state">
+              <div className="empty-state-icon-wrap">
+                <TrendingUp size={22} />
+              </div>
+              <h4>No Recurring Skill Gaps Yet</h4>
+              <p>Apply or match jobs to start seeing skill gap analytics. NextHire analyzes job requirements against your profile in real-time.</p>
+              <div className="skill-gap-skeleton-list">
+                <div className="skeleton-label-row">
+                  <span className="skeleton-pill">Distributed Systems</span>
+                  <span className="skeleton-meta">Preview gap</span>
+                </div>
+                <div className="skeleton-bar-track">
+                  <div className="skeleton-bar-fill" style={{ width: "68%" }} />
+                </div>
+                <div className="skeleton-label-row">
+                  <span className="skeleton-pill">GraphQL & Microservices</span>
+                  <span className="skeleton-meta">Preview gap</span>
+                </div>
+                <div className="skeleton-bar-track">
+                  <div className="skeleton-bar-fill" style={{ width: "42%" }} />
+                </div>
+                <div className="skeleton-label-row">
+                  <span className="skeleton-pill">Kubernetes Orchestration</span>
+                  <span className="skeleton-meta">Preview gap</span>
+                </div>
+                <div className="skeleton-bar-track">
+                  <div className="skeleton-bar-fill" style={{ width: "24%" }} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="skill-gap-progress-list">
+              {analytics.skill_gaps.map((gap) => {
+                const maxJobs = Math.max(...analytics.skill_gaps.map((g) => g.jobs), 1);
+                const percent = Math.min(Math.round((gap.jobs / maxJobs) * 100), 100);
+                return (
+                  <div className="skill-gap-row" key={gap.skill}>
+                    <div className="skill-gap-info">
+                      <span className="skill-name">{gap.skill}</span>
+                      <span className="skill-count">{gap.jobs} {gap.jobs === 1 ? "job" : "jobs"} require this</span>
+                    </div>
+                    <div className="skill-bar-track">
+                      <div className="skill-bar-fill" style={{ width: `${percent}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Target Companies Overview */}
+        <section className="linear-widget-panel">
+          <div className="widget-header">
+            <h3 className="widget-title">Target Companies Overview</h3>
+            <a href="/profile" className="widget-action-link">
+              <Plus size={13} />
+              <span>Add Companies</span>
+            </a>
+          </div>
+          {analytics.target_companies.length === 0 ? (
+            <div className="companies-empty-state">
+              <div className="empty-state-icon-wrap">
+                <Building2 size={22} />
+              </div>
+              <h4>No Target Companies Added</h4>
+              <p>Add target companies to your profile to monitor match rates, track job openings, and tailor your application materials.</p>
+              <a
+                href="/profile"
+                className="primary-button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <Plus size={14} />
+                <span>Add Target Companies</span>
+              </a>
+            </div>
+          ) : (
+            <div className="target-companies-list">
+              {analytics.target_companies.map((company) => (
+                <div className="target-company-item" key={company}>
+                  <div className="company-badge-avatar">
+                    {company.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="company-details">
+                    <span className="company-name">{company}</span>
+                    <span className="company-status">High match target · Actively hiring</span>
+                  </div>
+                  <a href="/jobs" className="company-explore-link">
+                    <span>Explore jobs</span>
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage({ user }) {
+  const [privacy, setPrivacy] = useState(null);
+  const [privacySaved, setPrivacySaved] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    getPrivacySettings().then(setPrivacy).catch(() => {});
+  }, []);
+
+  const handleExport = () => {
+    setExporting(true);
+    exportUserData()
+      .then((data) => {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "nexthire-data-export.json";
+        link.click();
+        URL.revokeObjectURL(url);
+      })
+      .finally(() => setExporting(false));
+  };
+
+  return (
+    <div className="analytics-container">
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <h2 className="widget-title">Privacy & Data Governance</h2>
+          <span className="widget-tag">Security & Compliance</span>
+        </div>
+        <p style={{ color: "var(--colors-slate)", fontSize: "14px", marginBottom: "1.25rem" }}>
+          Control how your career knowledge and job application analytics are processed. You own your data.
+        </p>
+        {privacy && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "14px", color: "var(--colors-ink)" }}>
+              <input
+                type="checkbox"
+                checked={privacy.analytics_enabled}
+                onChange={(event) =>
+                  updatePrivacySettings({
+                    analytics_enabled: event.target.checked,
+                  }).then((updated) => {
+                    setPrivacy(updated);
+                    setPrivacySaved(true);
+                    setTimeout(() => setPrivacySaved(false), 2500);
+                  })
+                }
+                style={{ width: "18px", height: "18px", accentColor: "var(--colors-primary)" }}
+              />
+              <span>Allow personalized product analytics and fit recommendations</span>
+            </label>
+            {privacySaved && (
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-semantic-success)" }}>
+                Privacy settings updated successfully.
+              </p>
+            )}
+            <div style={{ paddingTop: "0.5rem" }}>
+              <button
+                className="button-secondary"
+                onClick={handleExport}
+                disabled={exporting}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <Download size={14} />
+                <span>{exporting ? "Generating Export..." : "Download my data (JSON)"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {user?.role === "ADMIN" && <AdminPage />}
+    </div>
+  );
+}
+
+function AdminPage() {
+  const [overview, setOverview] = useState(null);
+  const [companies, setCompanies] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [crawls, setCrawls] = useState([]);
+  const [scheduler, setScheduler] = useState(null);
+  const [companyForm, setCompanyForm] = useState({ name: "", career_page_url: "", website: "" });
+  const [addingCompany, setAddingCompany] = useState(false);
+  const [scrapingAll, setScrapingAll] = useState(false);
+  const [scrapingId, setScrapingId] = useState("");
+  const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState("success");
+  const [editingCompany, setEditingCompany] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", career_page_url: "", website: "" });
+  const [error, setError] = useState(false);
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyPage, setCompanyPage] = useState(1);
+  const [resettingPrototype, setResettingPrototype] = useState(false);
+  const [naukriQuery, setNaukriQuery] = useState("Software Engineer");
+  const [naukriLocation, setNaukriLocation] = useState("Bengaluru, India");
+  const [naukriLimit, setNaukriLimit] = useState(20);
+  const [scrapingNaukri, setScrapingNaukri] = useState(false);
+  const COMPANIES_PER_PAGE = 20;
+
+  const handleNaukriScrape = (event) => {
+    event.preventDefault();
+    setScrapingNaukri(true);
+    scrapeNaukriJobs({
+      search_term: naukriQuery,
+      location: naukriLocation,
+      results_wanted: naukriLimit,
+    })
+      .then((newJobs) => {
+        loadAll();
+        showNotice(`JobSpy successfully scraped ${newJobs.length} live jobs from Naukri for "${naukriQuery}"!`);
+      })
+      .catch((err) => showNotice(err.message || "JobSpy Naukri scraping failed", "error"))
+      .finally(() => setScrapingNaukri(false));
+  };
+
+  const filteredCompanies = useMemo(() => {
+    const q = companySearch.trim().toLowerCase();
+    if (!q) return companies;
+    return companies.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.career_page_url && c.career_page_url.toLowerCase().includes(q)) ||
+        (c.website && c.website.toLowerCase().includes(q))
+    );
+  }, [companies, companySearch]);
+
+  const totalCompanyPages = Math.ceil(filteredCompanies.length / COMPANIES_PER_PAGE) || 1;
+  const paginatedCompanies = useMemo(() => {
+    const start = (companyPage - 1) * COMPANIES_PER_PAGE;
+    return filteredCompanies.slice(start, start + COMPANIES_PER_PAGE);
+  }, [filteredCompanies, companyPage]);
+
+  const loadAll = () => {
+    getAdminOverview().then(setOverview).catch(() => setError(true));
+    getSchedulerStatus().then(setScheduler).catch(() => {});
+    Promise.all([
+      getAdminCompanies(),
+      getAdminJobs(),
+      getAdminCrawls(),
+    ]).then(([nextCompanies, nextJobs, nextCrawls]) => {
+      setCompanies(nextCompanies);
+      setJobs(nextJobs);
+      setCrawls(nextCrawls);
+    }).catch(() => setError(true));
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  const showNotice = (msg, type = "success") => {
+    setNotice(msg);
+    setNoticeType(type);
+    setTimeout(() => setNotice(""), 4000);
+  };
+
+  const submitCompany = (event) => {
+    event.preventDefault();
+    setAddingCompany(true);
+    createCompany(companyForm)
+      .then((created) => {
+        setCompanyForm({ name: "", career_page_url: "", website: "" });
+        showNotice(`Added ${created.name}! Crawling career page for live roles...`);
+        // Immediately crawl the newly added company
+        return refreshCompany(created.id);
+      })
+      .then((crawl) => {
+        loadAll();
+        showNotice(`Finished scraping: Found ${crawl.jobs_found} roles (${crawl.jobs_added} added).`);
+      })
+      .catch((err) => {
+        loadAll();
+        showNotice(err.message || "Failed to add company", "error");
+      })
+      .finally(() => setAddingCompany(false));
+  };
+
+  const handleScrapeCompany = (companyId, companyName) => {
+    setScrapingId(companyId);
+    refreshCompany(companyId)
+      .then((crawl) => {
+        loadAll();
+        if (crawl.status === "succeeded") {
+          showNotice(`Scraped ${companyName}: Found ${crawl.jobs_found} roles (${crawl.jobs_added} added, ${crawl.jobs_updated} updated).`);
+        } else {
+          showNotice(`Scrape failed for ${companyName}: ${crawl.error_code || "Unknown error"}`, "error");
+        }
+      })
+      .catch((err) => showNotice(err.message || "Scrape failed", "error"))
+      .finally(() => setScrapingId(""));
+  };
+
+  const handleScrapeAll = () => {
+    setScrapingAll(true);
+    triggerScheduler()
+      .then((res) => {
+        loadAll();
+        showNotice(`Scraped all ${res.companies_crawled || companies.length} company career pages successfully!`);
+      })
+      .catch((err) => showNotice(err.message || "Failed to run scheduled scrapers", "error"))
+      .finally(() => setScrapingAll(false));
+  };
+
+  const handleToggleActive = (company) => {
+    updateCompany(company.id, { active: !company.active })
+      .then(() => {
+        loadAll();
+        showNotice(`${company.name} is now ${!company.active ? "active (will be scraped every 12h)" : "paused"}.`);
+      })
+      .catch((err) => showNotice(err.message, "error"));
+  };
+
+  const handleDeleteCompany = (company) => {
+    if (!window.confirm(`Delete ${company.name} and remove its ingested jobs?`)) return;
+    deleteCompany(company.id)
+      .then(() => {
+        loadAll();
+        showNotice(`Deleted ${company.name}.`);
+      })
+      .catch((err) => showNotice(err.message, "error"));
+  };
+
+  const handleStartEdit = (company) => {
+    setEditingCompany(company);
+    setEditForm({
+      name: company.name,
+      career_page_url: company.career_page_url || "",
+      website: company.website || "",
+    });
+  };
+
+  const handleSaveEdit = (event) => {
+    event.preventDefault();
+    if (!editingCompany) return;
+    updateCompany(editingCompany.id, editForm)
+      .then(() => {
+        setEditingCompany(null);
+        loadAll();
+        showNotice(`Updated ${editForm.name}.`);
+      })
+      .catch((err) => showNotice(err.message, "error"));
+  };
+
+  const handleResetPrototype = () => {
+    setResettingPrototype(true);
+    resetPrototypeCompanies()
+      .then((res) => {
+        loadAll();
+        showNotice(`Registry reset: top ${res.total} prototype companies loaded.`);
+      })
+      .catch((err) => showNotice(err.message || "Failed to reset companies", "error"))
+      .finally(() => setResettingPrototype(false));
+  };
+
+  if (error) return <p className="error-message" role="alert">Unable to load admin operations.</p>;
+  if (!overview) return <p className="loading-message" role="status">Loading admin workspace...</p>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginTop: "1.5rem" }}>
+      {/* Notification Banner */}
+      {notice && (
+        <div className={noticeType === "error" ? "error-message" : "success-message"} style={{ margin: 0 }}>
+          {notice}
+        </div>
+      )}
+
+      {/* 12-Hour Automated Scraping Banner Card */}
+      <section className="linear-widget-panel" style={{ background: "linear-gradient(135deg, rgba(86, 69, 212, 0.05), rgba(86, 69, 212, 0.01))" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "rgba(86, 69, 212, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--colors-primary)" }}>
+                <Clock size={14} />
+              </div>
+              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--colors-ink)" }}>
+                Automated 12-Hour Career Page Scraper
+              </h2>
+              <span className="badge-tag-purple" style={{ fontSize: "11px", fontWeight: 700 }}>
+                Every 12 Hours (Twice Daily)
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>
+              The background worker automatically crawls registered career pages every 12 hours to discover new open roles and close filled listings.
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button
+              className="primary-button"
+              onClick={handleScrapeAll}
+              disabled={scrapingAll}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <RefreshCw size={14} className={scrapingAll ? "spin" : ""} />
+              <span>{scrapingAll ? "Scraping All Pages..." : "Scrape All Now"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Scheduler Status Row */}
+        <div style={{ display: "flex", gap: "1.5rem", marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--colors-hairline)", flexWrap: "wrap", fontSize: "12.5px" }}>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Status: </span>
+            <strong style={{ color: "var(--colors-semantic-success)", fontWeight: 600 }}>Active (Running)</strong>
+          </div>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Schedule: </span>
+            <strong style={{ color: "var(--colors-ink)" }}>Every 12h (43,200s)</strong>
+          </div>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Active Career Pages: </span>
+            <strong style={{ color: "var(--colors-ink)" }}>{companies.filter((c) => c.active).length} companies</strong>
+          </div>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Total Crawl Runs: </span>
+            <strong style={{ color: "var(--colors-ink)" }}>{crawls.length}</strong>
+          </div>
+        </div>
+      </section>
+
+      {/* JobSpy · Naukri Live Scraper Section */}
+      <section className="linear-widget-panel" style={{ border: "1px solid rgba(86, 69, 212, 0.2)", background: "linear-gradient(135deg, rgba(86, 69, 212, 0.04), rgba(59, 130, 246, 0.02))" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1rem" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "rgba(59, 130, 246, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#2563eb" }}>
+                <Sparkles size={14} />
+              </div>
+              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--colors-ink)" }}>
+                JobSpy · Naukri Live Job Ingestion
+              </h2>
+              <span className="badge-tag-purple" style={{ fontSize: "11px", fontWeight: 700, background: "rgba(37, 99, 235, 0.1)", color: "#2563eb" }}>
+                speedyapply/JobSpy Powered
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>
+              Extract live, verified postings directly from Naukri with structured skills, verified locations, and official application links.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleNaukriScrape} style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ flex: "1 1 240px", minWidth: "220px" }}>
+            <input
+              type="text"
+              placeholder="Query (e.g. Software Engineer, Google, Python Developer, Stripe)"
+              value={naukriQuery}
+              onChange={(e) => setNaukriQuery(e.target.value)}
+              required
+              className="form-input"
+              style={{ width: "100%", padding: "8px 12px", fontSize: "13px" }}
+            />
+          </div>
+          <div style={{ width: "160px" }}>
+            <input
+              type="text"
+              placeholder="Location (e.g. Bengaluru, India)"
+              value={naukriLocation}
+              onChange={(e) => setNaukriLocation(e.target.value)}
+              className="form-input"
+              style={{ width: "100%", padding: "8px 12px", fontSize: "13px" }}
+            />
+          </div>
+          <div style={{ width: "110px" }}>
+            <select
+              value={naukriLimit}
+              onChange={(e) => setNaukriLimit(Number(e.target.value))}
+              className="form-input"
+              style={{ width: "100%", padding: "8px 10px", fontSize: "13px" }}
+            >
+              <option value={10}>10 roles</option>
+              <option value={20}>20 roles</option>
+              <option value={30}>30 roles</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={scrapingNaukri}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", height: "38px" }}
+          >
+            <Search size={14} className={scrapingNaukri ? "spin" : ""} />
+            <span>{scrapingNaukri ? "Scraping Naukri via JobSpy..." : "Scrape from Naukri"}</span>
+          </button>
+        </form>
+      </section>
+
+      {/* Metric Cards Grid */}
+      <div className="overview-metrics-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
+        <div className="overview-metric-card">
+          <div>
+            <div className="linear-card-header">
+              <span className="linear-metric-label">Companies</span>
+              <Building2 size={16} className="linear-icon-muted" />
+            </div>
+            <div className="linear-metric-value-row">
+              <span className="linear-metric-number">{overview.companies}</span>
+              <span className="linear-trend-badge positive">{overview.active_companies} active</span>
+            </div>
+          </div>
+          <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
+            Target career websites and portals monitored.
+          </p>
+        </div>
+
+        <div className="overview-metric-card">
+          <div>
+            <div className="linear-card-header">
+              <span className="linear-metric-label">Indexed Jobs</span>
+              <Briefcase size={16} className="linear-icon-muted" />
+            </div>
+            <div className="linear-metric-value-row">
+              <span className="linear-metric-number">{overview.jobs}</span>
+              <span className="linear-trend-badge positive">{overview.open_jobs} currently open</span>
+            </div>
+          </div>
+          <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
+            Live roles ingested via JobSpy &amp; career adapters.
+          </p>
+        </div>
+
+        <div className="overview-metric-card">
+          <div>
+            <div className="linear-card-header">
+              <span className="linear-metric-label">Total Ingestion Runs</span>
+              <Clock size={16} className="linear-icon-muted" />
+            </div>
+            <div className="linear-metric-value-row">
+              <span className="linear-metric-number">{overview.crawls}</span>
+              <span className="linear-trend-badge positive">{overview.successful_crawls} successful</span>
+            </div>
+          </div>
+          <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
+            Sync and crawl operations executed.
+          </p>
+        </div>
+
+        <div className="overview-metric-card">
+          <div>
+            <div className="linear-card-header">
+              <span className="linear-metric-label">Registered Candidates</span>
+              <Layers size={16} className="linear-icon-muted" />
+            </div>
+            <div className="linear-metric-value-row">
+              <span className="linear-metric-number">{overview.users}</span>
+              <span className="linear-trend-badge neutral">NextHire Candidates</span>
+            </div>
+          </div>
+          <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
+            Active candidate profiles &amp; resumes in system.
+          </p>
+        </div>
+      </div>
+
+      {/* Add Company Card */}
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <h2 className="widget-title">Add Company & Career Page</h2>
+          <span className="widget-tag">Target Source</span>
+        </div>
+        <p style={{ color: "var(--colors-slate)", fontSize: "13.5px", marginBottom: "1rem" }}>
+          Add a company name and its careers/jobs URL. The automated crawler will fetch and index open jobs every 12 hours.
+        </p>
+
+        <form onSubmit={submitCompany} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px", alignItems: "flex-end" }}>
+          <label style={{ margin: 0 }}>
+            <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
+              Company Name *
+            </span>
+            <input
+              required
+              type="text"
+              placeholder="e.g. OpenAI, Stripe, Vercel"
+              value={companyForm.name}
+              onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
+            />
+          </label>
+
+          <label style={{ margin: 0 }}>
+            <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
+              Career Page URL *
+            </span>
+            <input
+              required
+              type="url"
+              placeholder="https://careers.company.com/jobs"
+              value={companyForm.career_page_url}
+              onChange={(e) => setCompanyForm({ ...companyForm, career_page_url: e.target.value })}
+            />
+          </label>
+
+          <label style={{ margin: 0 }}>
+            <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
+              Official Website (optional)
+            </span>
+            <input
+              type="url"
+              placeholder="https://company.com"
+              value={companyForm.website}
+              onChange={(e) => setCompanyForm({ ...companyForm, website: e.target.value })}
+            />
+          </label>
+
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={addingCompany}
+            style={{ height: "40px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+          >
+            <Plus size={15} />
+            <span>{addingCompany ? "Adding & Scraping..." : "Add Company"}</span>
+          </button>
+        </form>
+      </section>
+
+      {/* Edit Modal / Inline Panel */}
+      {editingCompany && (
+        <section className="linear-widget-panel" style={{ border: "2px solid var(--colors-primary)" }}>
+          <div className="widget-header">
+            <h2 className="widget-title">Edit Company: {editingCompany.name}</h2>
+            <button className="button-link" onClick={() => setEditingCompany(null)}>Cancel</button>
+          </div>
+          <form onSubmit={handleSaveEdit} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px", marginTop: "1rem" }}>
+            <label style={{ margin: 0 }}>
+              Company Name
+              <input required type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </label>
+            <label style={{ margin: 0 }}>
+              Career Page URL
+              <input required type="url" value={editForm.career_page_url} onChange={(e) => setEditForm({ ...editForm, career_page_url: e.target.value })} />
+            </label>
+            <label style={{ margin: 0 }}>
+              Website
+              <input type="url" value={editForm.website} onChange={(e) => setEditForm({ ...editForm, website: e.target.value })} />
+            </label>
+            <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+              <button className="primary-button" type="submit">Save Changes</button>
+              <button className="button-secondary" type="button" onClick={() => setEditingCompany(null)}>Cancel</button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {/* Configured Companies List */}
+      <section className="linear-widget-panel">
+        <div className="widget-header" style={{ flexWrap: "wrap", gap: "10px" }}>
+          <div>
+            <h2 className="widget-title">Target Companies ({companies.length})</h2>
+            <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>Curated top {companies.length} prototype companies for automated crawling</span>
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button
+              className="button-secondary"
+              onClick={handleResetPrototype}
+              disabled={resettingPrototype}
+              style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px", padding: "5px 12px" }}
+            >
+              <RefreshCw size={12} className={resettingPrototype ? "spin" : ""} />
+              <span>{resettingPrototype ? "Resetting..." : "Reset to Top 12"}</span>
+            </button>
+            <span className="widget-tag">12-Hour Crawler Queue</span>
+          </div>
+        </div>
+        <p style={{ color: "var(--colors-slate)", fontSize: "13.5px", marginBottom: "1rem" }}>
+          These companies are indexed periodically. Click "Scrape Now" to immediately fetch open listings from their careers page.
+        </p>
+
+        {/* Company Search & Filter Bar */}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "260px" }}>
+            <Search size={14} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--colors-steel)", pointerEvents: "none" }} />
+            <input
+              type="text"
+              placeholder="Search companies by name or URL (e.g. Google, Stripe, Apple, Adobe)..."
+              value={companySearch}
+              onChange={(e) => {
+                setCompanySearch(e.target.value);
+                setCompanyPage(1);
+              }}
+              style={{ paddingLeft: "34px", margin: 0, width: "100%", height: "36px", fontSize: "13px" }}
+            />
+          </div>
+          {companySearch && (
+            <button
+              className="button-secondary"
+              onClick={() => {
+                setCompanySearch("");
+                setCompanyPage(1);
+              }}
+              style={{ fontSize: "12px", height: "36px", padding: "0 12px" }}
+            >
+              Clear
+            </button>
+          )}
+          <span style={{ fontSize: "12.5px", color: "var(--colors-steel)" }}>
+            Showing {paginatedCompanies.length} of {filteredCompanies.length} companies
+          </span>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {paginatedCompanies.length === 0 ? (
+            <div style={{ padding: "2rem", textAlign: "center", color: "var(--colors-steel)", background: "var(--colors-surface-soft)", borderRadius: "8px" }}>
+              No companies found matching "{companySearch}".
+            </div>
+          ) : (
+            paginatedCompanies.map((company) => {
+              const isScraping = scrapingId === company.id;
+              return (
+                <div
+                  key={company.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    background: "var(--colors-surface-soft)",
+                    borderRadius: "8px",
+                    border: "1px solid var(--colors-hairline)",
+                    flexWrap: "wrap",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "220px", flex: 1 }}>
+                    <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: "var(--colors-primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>
+                      {company.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ overflow: "hidden" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <strong style={{ fontSize: "14px", color: "var(--colors-ink)" }}>{company.name}</strong>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            background: company.active ? "rgba(26, 174, 57, 0.12)" : "rgba(120, 118, 113, 0.12)",
+                            color: company.active ? "var(--colors-semantic-success)" : "var(--colors-steel)",
+                          }}
+                        >
+                          {company.active ? "Active" : "Paused"}
+                        </span>
+                      </div>
+                      {company.career_page_url && (
+                        <a
+                          href={company.career_page_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ fontSize: "12px", color: "var(--colors-link-blue)", display: "inline-flex", alignItems: "center", gap: "4px", marginTop: "2px", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{company.career_page_url}</span>
+                          <ExternalLink size={10} style={{ flexShrink: 0 }} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    {company.last_sync_status && (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          padding: "3px 8px",
+                          borderRadius: "4px",
+                          background: company.last_sync_status === "succeeded" ? "rgba(26, 174, 57, 0.1)" : "rgba(221, 91, 0, 0.1)",
+                          color: company.last_sync_status === "succeeded" ? "var(--colors-semantic-success)" : "var(--colors-brand-orange)",
+                        }}
+                      >
+                        {company.last_sync_status === "succeeded" ? "Last Scrape: OK" : "Last Scrape: Failed"}
+                      </span>
+                    )}
+
+                    <button
+                      className="primary-button"
+                      onClick={() => handleScrapeCompany(company.id, company.name)}
+                      disabled={isScraping}
+                      style={{ fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                    >
+                      <RefreshCw size={12} className={isScraping ? "spin" : ""} />
+                      <span>{isScraping ? "Scraping..." : "Scrape Now"}</span>
+                    </button>
+
+                    <button
+                      className="button-secondary"
+                      onClick={() => handleToggleActive(company)}
+                      style={{ fontSize: "12px", padding: "6px 10px" }}
+                    >
+                      {company.active ? "Pause" : "Resume"}
+                    </button>
+
+                    <button
+                      className="button-link"
+                      onClick={() => handleStartEdit(company)}
+                      style={{ fontSize: "12px" }}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      className="button-link"
+                      onClick={() => handleDeleteCompany(company)}
+                      style={{ fontSize: "12px", color: "#ef4444" }}
+                      title="Delete company"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Pagination Controls */}
+        {totalCompanyPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--colors-hairline)", flexWrap: "wrap", gap: "10px" }}>
+            <span style={{ fontSize: "12.5px", color: "var(--colors-slate)" }}>
+              Page {companyPage} of {totalCompanyPages} ({filteredCompanies.length} companies total)
+            </span>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <button
+                className="button-secondary"
+                disabled={companyPage <= 1}
+                onClick={() => setCompanyPage((p) => Math.max(1, p - 1))}
+                style={{ fontSize: "12px", padding: "4px 10px" }}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: "12px", color: "var(--colors-ink)", fontWeight: 600, padding: "0 4px" }}>
+                {companyPage} / {totalCompanyPages}
+              </span>
+              <button
+                className="button-secondary"
+                disabled={companyPage >= totalCompanyPages}
+                onClick={() => setCompanyPage((p) => Math.min(totalCompanyPages, p + 1))}
+                style={{ fontSize: "12px", padding: "4px 10px" }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Discovered Jobs Preview Table */}
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <h2 className="widget-title">Live Discovered Jobs ({jobs.length})</h2>
+          <a className="button-link" href="/jobs" style={{ fontSize: "13px" }}>
+            View in Job Feed →
+          </a>
+        </div>
+        <p style={{ color: "var(--colors-slate)", fontSize: "13.5px", marginBottom: "1rem" }}>
+          All scraped jobs are dynamically searchable, filterable, and scored by AI in the candidate Job Feed.
+        </p>
+
+        {jobs.length === 0 ? (
+          <p className="empty-message">No jobs discovered yet. Add a company and click "Scrape Now" to fetch live openings.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {jobs.slice(0, 8).map(({ job, company_name }) => (
+              <div
+                key={job.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 14px",
+                  background: "var(--colors-surface-soft)",
+                  borderRadius: "6px",
+                  border: "1px solid var(--colors-hairline)",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <strong style={{ fontSize: "13.5px", color: "var(--colors-ink)" }}>{job.title}</strong>
+                    <span style={{ fontSize: "11px", color: "var(--colors-steel)" }}>· {company_name}</span>
+                    <span style={{ fontSize: "11px", padding: "1px 5px", borderRadius: "3px", background: "rgba(86, 69, 212, 0.08)", color: "var(--colors-primary)" }}>
+                      {job.status}
+                    </span>
+                  </div>
+                  {job.required_skills && job.required_skills.length > 0 && (
+                    <div style={{ display: "flex", gap: "4px", marginTop: "4px", flexWrap: "wrap" }}>
+                      {job.required_skills.slice(0, 4).map((s) => (
+                        <span key={s} style={{ fontSize: "10.5px", padding: "1px 6px", borderRadius: "3px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <a
+                  href={job.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="button-link"
+                  style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "3px" }}
+                >
+                  <span>Apply Link</span>
+                  <ExternalLink size={11} />
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Crawl History & Audit */}
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <h2 className="widget-title">Recent Scraping History</h2>
+          <span className="widget-tag">{crawls.length} runs</span>
+        </div>
+        {crawls.length === 0 ? (
+          <p className="empty-message">No crawl logs recorded yet.</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+            {crawls.slice(0, 6).map((crawl, idx) => (
+              <li
+                key={`${crawl.company_id}-${crawl.completed_at}-${idx}`}
+                style={{
+                  fontSize: "12.5px",
+                  padding: "8px 12px",
+                  borderRadius: "4px",
+                  background: "var(--colors-surface-soft)",
+                  border: "1px solid var(--colors-hairline)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span>
+                  <strong>{crawl.company_id}</strong> — status:{" "}
+                  <span style={{ color: crawl.status === "succeeded" ? "var(--colors-semantic-success)" : "var(--colors-brand-orange)", fontWeight: 600 }}>
+                    {crawl.status}
+                  </span>
+                  {crawl.error_code ? ` (${crawl.error_code})` : ""}
+                </span>
+                <span style={{ color: "var(--colors-steel)" }}>
+                  {crawl.jobs_found} found · {crawl.jobs_added} added
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+const rootElement = typeof document !== "undefined" ? document.getElementById("root") : null;
+if (rootElement) {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}

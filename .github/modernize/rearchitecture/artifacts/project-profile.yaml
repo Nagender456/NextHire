@@ -1,0 +1,45 @@
+project:
+  scope_path: "."
+  loc: 763583
+  languages: [Python, TypeScript, JavaScript, YAML, Shell]
+  git: false
+  structure:
+    backend: "FastAPI backend, domain services, API routes, and tests"
+    frontend: "React/Vite frontend, pages, components, and client tests"
+    infrastructure: "Local runtime and deployment configuration"
+    workers: "Background worker boundary and job execution code"
+  notes: "NextHire full-stack career platform; workflow.md is the source of truth for post-MVP work."
+
+assessment:
+  change_type: upgrade
+  rationale: |
+    This is a brownfield modernization of an existing full-stack application,
+    extending the current Python/React/worker stack with the remaining
+    production-grade capabilities in workflow.md rather than replacing stacks.
+  transformations:
+    - fromStack: "FastAPI + React/Vite + worker services"
+      fromStackVersion: "existing repository versions"
+      toStack: "FastAPI + React/Vite + durable production services"
+      toStackVersion: "as specified by existing workflow.md and environment constraints"
+  grouping_needed: true
+  deep_planning: true
+
+progress_sync:
+  run_id: "6FA1EFE1-3294-4A30-9E3E-63A768F72293"
+  grouping_mode: "none"
+  execution_mode: "all-at-once"
+  plan_start_time: "2026-10-26T13:48:21Z"
+  plan_completed_time: ""
+  execution_start_time: ""
+  execution_completed_time: ""
+  validation_start_time: ""
+  validation_completed_time: ""
+  total_phases: 5
+  completed_phases: 0
+  total_modules: 4
+  completed_modules: 0
+  total_tasks: 5
+  completed_tasks: 0
+  total_commits: 0
+  build_verified: false
+  test_verified: false

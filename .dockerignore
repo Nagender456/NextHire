@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+backend/.venv
+backend/.pytest_cache
+backend/.ruff_cache
+frontend/node_modules
+frontend/dist
+workers/__pycache__
+**/__pycache__
+*.py[cod]
+.env
+.env.*
+!.env.example
+atlas-credentials.env
+runtime-validation-report.md

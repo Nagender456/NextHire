@@ -1,0 +1,167 @@
+from datetime import UTC, datetime
+
+from app.models import (
+    Application,
+    ApplicationCreate,
+    ApplicationStatus,
+    ApplicationUpdate,
+    CareerProfile,
+    DashboardSummary,
+    Job,
+)
+from app.repositories import InMemoryRepository, repository
+from app.job_ingestion import ingestion_store
+from app.auth_store import auth_store
+
+
+class FoundationService:
+    def __init__(self, data: InMemoryRepository) -> None:
+        self.data = data
+
+    def get_profile(self) -> CareerProfile:
+        return self.data.get_profile()
+
+    def list_jobs(self) -> list[Job]:
+        return [*self.data.list_jobs(), *ingestion_store.jobs.values()]
+
+    def list_applications(self) -> list[Application]:
+        return self.data.list_applications()
+
+    def get_job(self, job_id: str) -> Job | None:
+        return ingestion_store.jobs.get(job_id) or self.data.get_job(job_id)
+
+    def create_application(
+        self, user_id: str, payload: ApplicationCreate
+    ) -> Application:
+        if self.get_job(payload.job_id) is None:
+            raise ValueError("JOB_NOT_FOUND")
+        job = self.get_job(payload.job_id)
+        now = datetime.now(UTC)
+        application = Application(
+            id=f"application-{len(self.data.applications) + 1}",
+            user_id=user_id,
+            job_id=payload.job_id,
+            status=payload.status,
+            applied_at=now if payload.status != ApplicationStatus.SAVED else None,
+            company_id=job.company_id if job else None,
+            job_title=job.title if job else "",
+            resume_version_id=payload.resume_version_id,
+            application_url=payload.application_url or (job.url if job else None),
+            notes=payload.notes,
+            deadline=payload.deadline,
+            next_action=payload.next_action,
+            next_action_at=payload.next_action_at,
+            interview_at=payload.interview_at,
+            job_snapshot={
+                "title": job.title,
+                "company_id": job.company_id,
+                "url": str(job.url),
+            },
+            created_at=now,
+            updated_at=now,
+        )
+        from app.auth_store import auth_store
+
+        auth_store.add_application_activity(user_id, application.id, "created")
+        return self.data.add_application(application)
+
+    def update_application(
+        self, application_id: str, user_id: str, payload: ApplicationUpdate
+    ) -> Application | None:
+        application = next(
+            (item for item in self.list_applications() if item.id == application_id),
+            None,
+        )
+        if application is None or application.user_id != user_id:
+            return None
+        updated = self.data.update_application(
+            application_id, payload.status, payload.resume_version_id
+        )
+        if updated:
+            changes = payload.model_dump(
+                exclude_unset=True,
+                exclude={"status", "resume_version_id"},
+            )
+            for field, value in changes.items():
+                setattr(updated, field, value)
+            updated.updated_at = datetime.now(UTC)
+            from app.auth_store import auth_store
+
+            auth_store.add_application_activity(
+                user_id, application_id, "updated", ",".join(changes)
+            )
+        if (
+            updated
+            and payload.status is not None
+            and payload.status != ApplicationStatus.SAVED
+            and not updated.applied_at
+        ):
+            updated.applied_at = datetime.now(UTC)
+        return updated
+
+    def get_dashboard(
+        self, profile: CareerProfile | None = None, user_id: str | None = None
+    ) -> DashboardSummary:
+        profile = profile or self.get_profile()
+        if user_id and user_id in auth_store.profiles:
+            if not profile.skills:
+                skills_set: list[str] = []
+                for s in auth_store.career_entities.get(user_id, {}).get("skills", {}).values():
+                    name = s.get("name")
+                    if name and name not in skills_set:
+                        skills_set.append(name)
+                for ext in auth_store.extracted_entities.get(user_id, {}).values():
+                    if ext.get("confirmed_by_user") and ext.get("entity_type") == "skills":
+                        text = ext.get("data", {}).get("text", "")
+                        for p in text.replace("\n", ",").split(","):
+                            clean = p.strip().strip("•-* \t")
+                            if clean and len(clean) < 60 and clean not in skills_set:
+                                skills_set.append(clean)
+                for pref_skill in profile.preferred_skills.keys():
+                    if pref_skill not in skills_set:
+                        skills_set.append(pref_skill)
+                if skills_set:
+                    profile = profile.model_copy(update={"skills": skills_set})
+                    auth_store.profiles[user_id] = profile
+
+            if not profile.headline:
+                for ext in auth_store.extracted_entities.get(user_id, {}).values():
+                    if ext.get("confirmed_by_user"):
+                        text = str(ext.get("data", {}).get("text", ""))
+                        if "LeetCode" in text or "ICPC" in text or "Competitive" in text:
+                            profile = profile.model_copy(update={"headline": "Software Engineer | Competitive Programmer"})
+                            auth_store.profiles[user_id] = profile
+                            break
+                        elif ext.get("entity_type") == "experience" and text:
+                            first_line = text.splitlines()[0].strip()
+                            if first_line and len(first_line) < 60:
+                                profile = profile.model_copy(update={"headline": first_line})
+                                auth_store.profiles[user_id] = profile
+                                break
+                if not profile.headline and profile.preferred_roles:
+                    profile = profile.model_copy(update={"headline": profile.preferred_roles[0]})
+                    auth_store.profiles[user_id] = profile
+
+        applications = [
+            application
+            for application in self.list_applications()
+            if user_id is None or application.user_id == user_id
+        ]
+        completed_fields = sum(
+            bool(value)
+            for value in (profile.headline, profile.location, profile.skills)
+        )
+        return DashboardSummary(
+            profile=profile,
+            recommended_jobs=self.list_jobs()[:5],
+            applications=applications[:5],
+            profile_completeness=round(completed_fields / 3 * 100),
+            jobs_discovered=len(self.list_jobs()),
+            active_applications=sum(
+                application.status.value not in {"rejected", "offer", "withdrawn"}
+                for application in applications
+            ),
+        )
+
+
+service = FoundationService(repository)
