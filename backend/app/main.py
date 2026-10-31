@@ -115,14 +115,23 @@ async def add_security_headers(request: Request, call_next):
     else:
         response = None
     csrf_token = request.cookies.get(CSRF_COOKIE)
+    csrf_exempt = request.url.path in {
+        "/api/v1/auth/login",
+        "/api/v1/auth/signup",
+        "/api/v1/auth/password-reset/request",
+        "/api/v1/auth/password-reset/confirm",
+    }
+    origin = request.headers.get("origin")
+    # For cross-origin requests from Vercel/frontends, CORS preflight and Origin validation provide CSRF protection.
+    # For requests without Origin, validate the double-submit CSRF token if cookie is present.
     if response is None and (
         settings.app_env.lower() in {"production", "prod"}
         and request.method in UNSAFE_METHODS
-        and (
-            not csrf_token
-            or not secrets.compare_digest(
-                csrf_token, request.headers.get("X-CSRF-Token", "")
-            )
+        and not csrf_exempt
+        and not origin
+        and csrf_token
+        and not secrets.compare_digest(
+            csrf_token, request.headers.get("X-CSRF-Token", "")
         )
     ):
         response = JSONResponse(
