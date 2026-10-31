@@ -73,11 +73,16 @@ RATE_LIMITS = {
 
 
 def _rate_limit_bucket(path: str) -> tuple[str, tuple[int, int]] | None:
+    if path in RATE_LIMITS:
+        return path, RATE_LIMITS[path]
     for template, limits in RATE_LIMITS.items():
-        prefix, suffix = template.split("%s")
-        if path.startswith(prefix) and path.endswith(suffix):
-            return template, limits
-    return (path, RATE_LIMITS[path]) if path in RATE_LIMITS else None
+        if "%s" in template:
+            parts = template.split("%s")
+            if len(parts) == 2:
+                prefix, suffix = parts
+                if path.startswith(prefix) and path.endswith(suffix):
+                    return template, limits
+    return None
 
 
 @app.middleware("http")
@@ -197,6 +202,11 @@ async def handle_unexpected_error(request: Request, error: Exception) -> JSONRes
             }
         },
     )
+
+
+@app.api_route("/", methods=["GET", "HEAD"], tags=["system"])
+async def root() -> dict[str, str]:
+    return {"status": "ok", "service": "nexthire-api", "version": "0.1.0"}
 
 
 @app.get("/api/v1/health", tags=["system"])
