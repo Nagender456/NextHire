@@ -183,7 +183,11 @@ def ai_verify_job_opening(
     import json
 
     # 1. Attempt verification via Gemini API if key is present
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    api_key = (
+        get_settings().gemini_api_key
+        or os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+    )
     if api_key:
         try:
             from google import genai
@@ -197,18 +201,23 @@ def ai_verify_job_opening(
                 f"Snippet: {snippet[:400]}\n\n"
                 f"Output valid JSON ONLY: {{\"is_job_opening\": true/false, \"clean_title\": \"...\", \"reason\": \"...\"}}"
             )
-            resp = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config={"response_mime_type": "application/json"}
-            )
-            data = json.loads(resp.text)
-            if "is_job_opening" in data:
-                return (
-                    bool(data["is_job_opening"]),
-                    str(data.get("clean_title", title)).strip(),
-                    str(data.get("reason", "")),
-                )
+            for model_candidate in ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"):
+                try:
+                    resp = client.models.generate_content(
+                        model=model_candidate,
+                        contents=prompt,
+                        config={"response_mime_type": "application/json"}
+                    )
+                    if resp and resp.text:
+                        data = json.loads(resp.text)
+                        if "is_job_opening" in data:
+                            return (
+                                bool(data["is_job_opening"]),
+                                str(data.get("clean_title", title)).strip(),
+                                str(data.get("reason", "")),
+                            )
+                except Exception:
+                    continue
         except Exception as e:
             logger.debug("Gemini AI job classifier fallback: %s", e)
 

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     session_cookie_samesite: str = "lax"
     cors_allowed_origins: str = "http://localhost:5173"
     cors_origin_regex: str = r".*"
+    gemini_api_key: str = ""
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"

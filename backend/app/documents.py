@@ -12,6 +12,8 @@ try:
 except ImportError:
     pypdf = None
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 ALLOWED_DOCUMENTS = {
@@ -142,7 +144,11 @@ def _extract_pdf_text(content: bytes) -> str:
 
 
 def _extract_with_gemini(text: str) -> list[dict[str, object]] | None:
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    api_key = (
+        get_settings().gemini_api_key
+        or os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+    )
     if not api_key:
         return None
     try:
@@ -192,13 +198,20 @@ def _extract_with_gemini(text: str) -> list[dict[str, object]] | None:
             "}\n\n"
             f"Resume Text:\n{text[:15000]}"
         )
-        resp = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config={"response_mime_type": "application/json"}
-        )
-        data = json.loads(resp.text)
-        return _format_ai_extracted_data(data)
+        for model_candidate in ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"):
+            try:
+                resp = client.models.generate_content(
+                    model=model_candidate,
+                    contents=prompt,
+                    config={"response_mime_type": "application/json"}
+                )
+                if resp and resp.text:
+                    data = json.loads(resp.text)
+                    return _format_ai_extracted_data(data)
+            except Exception as e:
+                logger.debug("Gemini model %s failed: %s", model_candidate, e)
+                continue
+        return None
     except Exception as exc:
         logger.debug("Gemini resume parser fallback: %s", exc)
         return None
