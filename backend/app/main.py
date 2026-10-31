@@ -52,9 +52,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
+    allow_origin_regex=settings.cors_origin_regex if settings.cors_origin_regex else None,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 CSRF_COOKIE = "nexthire_csrf"
