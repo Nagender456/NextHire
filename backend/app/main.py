@@ -136,7 +136,7 @@ async def add_security_headers(request: Request, call_next):
             secrets.token_urlsafe(32),
             httponly=False,
             secure=settings.session_cookie_secure,
-            samesite="lax",
+            samesite=settings.session_cookie_samesite,
             max_age=60 * 60 * 24 * 7,
             path="/",
         )

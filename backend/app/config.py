@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     repository_backend: str = "memory"
     session_secret: str = "local-development-secret-change-me"
     session_cookie_secure: bool = False
+    session_cookie_samesite: str = "lax"
     cors_allowed_origins: str = "http://localhost:5173"
     google_client_id: str = ""
     google_client_secret: str = ""

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: nexthire-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: "none"
+      - key: REPOSITORY_BACKEND
+        value: mongo
+      - key: MONGODB_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
