@@ -1,7 +1,13 @@
+import os
 from functools import lru_cache
 
+from dotenv import load_dotenv
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+load_dotenv()
+load_dotenv("d:/Programs/NextHire(Copilot)/.env")
+load_dotenv("d:/Programs/NextHire(Copilot)/backend/.env")
 
 
 class Settings(BaseSettings):
@@ -62,4 +68,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    load_dotenv()
+    s = Settings()
+    if not s.gemini_api_key:
+        s.gemini_api_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")
+    return s
+

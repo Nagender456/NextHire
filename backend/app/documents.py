@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_DOCUMENTS = {
     "application/pdf": ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "text/plain": ".txt",
 }
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 MAX_EXTRACTED_TEXT = 1_000_000
@@ -90,6 +91,8 @@ async def read_upload(file) -> bytes:
 
 
 def extract_text(filename: str, content_type: str, content: bytes) -> str:
+    if content_type == "text/plain" or filename.lower().endswith(".txt"):
+        return content.decode("utf-8", "ignore")[:MAX_EXTRACTED_TEXT]
     if content_type == "application/pdf" and filename.lower().endswith(".pdf"):
         if not content.startswith(b"%PDF"):
             raise ValueError("INVALID_PDF")
@@ -143,14 +146,32 @@ def _extract_pdf_text(content: bytes) -> str:
     ]
 
 
-def _extract_with_gemini(text: str) -> list[dict[str, object]] | None:
+def _extract_with_gemini(text: str) -> tuple[list[dict[str, object]] | None, str]:
     api_key = (
         get_settings().gemini_api_key
         or os.environ.get("GEMINI_API_KEY")
         or os.environ.get("GOOGLE_API_KEY")
     )
     if not api_key:
-        return None
+        try:
+            from dotenv import dotenv_values
+            for env_path in (
+                "d:/Programs/NextHire(Copilot)/.env",
+                "d:/Programs/NextHire(Copilot)/backend/.env",
+                ".env",
+                "../.env",
+            ):
+                if os.path.exists(env_path):
+                    vals = dotenv_values(env_path)
+                    if vals.get("GEMINI_API_KEY"):
+                        api_key = vals["GEMINI_API_KEY"]
+                        break
+        except Exception:
+            pass
+
+    if not api_key:
+        logger.warning("No GEMINI_API_KEY configured for resume extraction.")
+        return None, ""
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
@@ -198,7 +219,14 @@ def _extract_with_gemini(text: str) -> list[dict[str, object]] | None:
             "}\n\n"
             f"Resume Text:\n{text[:15000]}"
         )
-        for model_candidate in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.0-flash"):
+        for model_candidate in (
+            "gemini-2.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-flash-latest",
+        ):
             try:
                 resp = client.models.generate_content(
                     model=model_candidate,
@@ -207,14 +235,21 @@ def _extract_with_gemini(text: str) -> list[dict[str, object]] | None:
                 )
                 if resp and resp.text:
                     data = json.loads(resp.text)
-                    return _format_ai_extracted_data(data)
+                    results = _format_ai_extracted_data(data)
+                    logger.info(
+                        "Successfully parsed resume using Gemini AI model '%s' (%d entities extracted)",
+                        model_candidate,
+                        len(results),
+                    )
+                    return results, f"Gemini AI ({model_candidate})"
             except Exception as e:
-                logger.debug("Gemini model %s failed: %s", model_candidate, e)
+                logger.warning("Gemini model %s failed: %s (trying next candidate)", model_candidate, e)
                 continue
-        return None
+        logger.warning("All Gemini model candidates exhausted or failed.")
+        return None, ""
     except Exception as exc:
-        logger.debug("Gemini resume parser fallback: %s", exc)
-        return None
+        logger.warning("Gemini resume parser fallback: %s", exc)
+        return None, ""
 
 
 def _format_ai_extracted_data(data: dict[str, Any]) -> list[dict[str, object]]:
@@ -567,12 +602,19 @@ def _extract_with_advanced_nlp(text: str) -> list[dict[str, object]]:
     return results
 
 
-def detect_entities(text: str) -> list[dict[str, object]]:
+def detect_entities_with_engine(text: str) -> tuple[list[dict[str, object]], str]:
     """Primary entity detection router: uses Gemini AI if configured, otherwise deep NLP engine."""
     # 1. Attempt with Gemini API
-    ai_results = _extract_with_gemini(text)
+    ai_results, engine_name = _extract_with_gemini(text)
     if ai_results:
-        return ai_results
+        return ai_results, engine_name
 
     # 2. Intelligent NLP / Heuristic Engine
-    return _extract_with_advanced_nlp(text)
+    logger.info("Using High-Fidelity Local NLP Engine for resume entity extraction.")
+    return _extract_with_advanced_nlp(text), "Local NLP Engine"
+
+
+def detect_entities(text: str) -> list[dict[str, object]]:
+    entities, _ = detect_entities_with_engine(text)
+    return entities
+

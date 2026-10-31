@@ -2082,6 +2082,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
       .then((entities) => {
         setExtracted(entities);
         refreshKnowledge();
+        if (onProfileSync) onProfileSync();
         if (entities.length === 0) {
           setError("No section headings or text detected in this file. Try another format or add records manually.");
         }
@@ -2354,8 +2355,13 @@ function CareerKnowledgeBase({ onProfileSync }) {
 
       {document && !analyzingResume && (
         <>
-          <p className="success-message" role="status" style={{ marginTop: "1rem" }}>
-            Processed {document.filename}.
+          <p className="success-message" role="status" style={{ marginTop: "1rem", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <span>✓ Processed <strong>{document.filename}</strong></span>
+            {document.extraction_engine && (
+              <span style={{ background: "rgba(99, 102, 241, 0.15)", color: "var(--colors-primary)", border: "1px solid rgba(99, 102, 241, 0.3)", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
+                ✨ {document.extraction_engine}
+              </span>
+            )}
           </p>
 
           <div className="ai-extracted-panel">
@@ -2363,8 +2369,8 @@ function CareerKnowledgeBase({ onProfileSync }) {
               <div className="ai-extracted-title-group">
                 <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
                 <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600 }}>AI Extracted Findings</h3>
-                <span className="ai-confidence-pill">
-                  ✨ AI Analyzed ({extracted.length})
+                <span className="ai-confidence-pill" style={{ background: "rgba(99, 102, 241, 0.12)", color: "var(--colors-primary)", border: "1px solid rgba(99, 102, 241, 0.25)" }}>
+                  ✨ {document.extraction_engine || "AI Analyzed"} ({extracted.length} items)
                 </span>
               </div>
               {extracted.length > 0 && (

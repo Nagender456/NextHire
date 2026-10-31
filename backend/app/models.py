@@ -194,6 +194,7 @@ class CareerDocument(BaseModel):
     size: int
     extracted_text: str = ""
     status: str = "processed"
+    extraction_engine: str = "Gemini AI"
     created_at: datetime
 
 

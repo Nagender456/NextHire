@@ -100,6 +100,7 @@ from app.services import service
 from app.documents import (
     ALLOWED_DOCUMENTS,
     detect_entities,
+    detect_entities_with_engine,
     extract_text,
     read_upload,
 )
@@ -712,6 +713,9 @@ async def upload_document(
             status_code=413 if code == "DOCUMENT_TOO_LARGE" else 422,
             detail={"code": code},
         ) from error
+
+    entities, engine_name = detect_entities_with_engine(text)
+
     document = auth_store.create_document(
         user.id,
         {
@@ -720,14 +724,15 @@ async def upload_document(
             "size": len(content),
             "extracted_text": text,
             "status": "processed",
+            "extraction_engine": engine_name,
             "content": content,
         },
     )
-    entities = detect_entities(text)
+
     for extracted in entities:
         auth_store.add_extracted_entity(user.id, document["id"], extracted)
 
-    # Auto-enrich profile skills and headline with high confidence findings if currently unpopulated
+    # Auto-enrich profile skills and headline with extracted findings
     current_profile = auth_store.get_profile(user.id)
     extracted_skills = [
         e["data"]["name"]
@@ -749,15 +754,20 @@ async def upload_document(
             elif titl:
                 extracted_headline = titl
 
+    current_skills = list(current_profile.skills or [])
+    for s in extracted_skills:
+        s_clean = s.strip()
+        if s_clean and s_clean not in current_skills:
+            current_skills.append(s_clean)
+
     profile_updates = {}
-    if not current_profile.skills and extracted_skills:
-        profile_updates["skills"] = extracted_skills[:15]
-    if not current_profile.headline and extracted_headline:
+    if current_skills != current_profile.skills:
+        profile_updates["skills"] = current_skills[:30]
+    if (not current_profile.headline) and extracted_headline:
         profile_updates["headline"] = extracted_headline[:80]
+
     if profile_updates:
-        auth_store.profiles[user.id] = current_profile.model_copy(
-            update=profile_updates
-        )
+        auth_store.update_profile(user.id, ProfileUpdate(**profile_updates))
 
     return document
 

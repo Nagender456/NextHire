@@ -3,6 +3,11 @@ import secrets
 from time import perf_counter
 from uuid import uuid4
 
+from dotenv import load_dotenv
+load_dotenv()
+load_dotenv("d:/Programs/NextHire(Copilot)/.env")
+load_dotenv("d:/Programs/NextHire(Copilot)/backend/.env")
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware

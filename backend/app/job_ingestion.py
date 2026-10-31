@@ -102,46 +102,41 @@ def _extract_skills(text: str, title: str = "") -> tuple[list[str], list[str]]:
 
 
 def infer_skills_for_role(title: str, text: str = "") -> tuple[list[str], list[str]]:
-    clean = re.sub(r"^\d+\s+", "", title).strip()
-    tl = f"{clean.lower()} {text.lower()}"
+    clean = re.sub(r"^\d+\s+", "", title).strip().lower()
 
-    if any(k in tl for k in ("marketing", "seo", "aeo", "geo", "growth", "brand", "content strategy", "communications")):
+    # 1. Match title directly against role domains to prevent page footer keyword contamination
+    if any(k in clean for k in ("marketing", "seo", "aeo", "geo", "growth", "brand", "content strategy", "communications")):
         return ["Digital Marketing", "SEO & AEO", "Content Strategy"], ["Growth Analytics", "Campaign Management"]
-    if any(k in tl for k in ("ar analyst", "ap analyst", "accounting", "finance", "audit", "tax", "treasury")):
+    if any(k in clean for k in ("ar analyst", "ap analyst", "accounting", "finance", "audit", "tax", "treasury")):
         return ["Financial Analysis", "Accounting", "Financial Reporting"], ["ERP Systems", "Excel / Financial Modeling"]
-    if any(k in tl for k in ("abuse investigator", "investigator", "compliance", "legal", "risk")):
+    if any(k in clean for k in ("abuse investigator", "investigator", "compliance", "legal", "risk")):
         return ["Risk & Compliance", "Investigation", "Policy Enforcement"], ["Incident Response", "Data Analysis"]
-    if any(k in tl for k in ("sales", "business development", "account manager", "account executive", "bdr", "sdr")):
+    if any(k in clean for k in ("sales", "business development", "account manager", "account executive", "bdr", "sdr")):
         return ["B2B Sales", "Account Management", "Client Relations"], ["Pipeline Management", "Negotiation"]
-    if any(k in tl for k in ("program manager", "product support", "product specialist")):
+    if any(k in clean for k in ("program manager", "product support", "product specialist")):
         return ["Technical Program Management", "Cross-Functional Leadership", "Operations"], ["Agile", "Data Analytics"]
-    if any(k in tl for k in ("data center", "manufacturing", "mechanical", "electrical", "hardware")):
+    if any(k in clean for k in ("data center", "manufacturing", "mechanical", "electrical", "hardware")):
         return ["Hardware Infrastructure", "Systems Engineering", "Troubleshooting"], ["Site Reliability", "Preventive Maintenance"]
-    if any(k in tl for k in ("ai engineer", "machine learning", "aiml", "research scientist", "audio")):
-        req = ["Machine Learning", "Model Deployment"]
-        if "python" in tl or "ai engineer" in tl or "scientist" in tl:
-            req.insert(0, "Python")
-        if "pytorch" in tl or "torch" in tl:
-            req.append("PyTorch")
-        return req, ["Distributed Systems", "Algorithms", "Deep Learning"]
+    if any(k in clean for k in ("ai engineer", "machine learning", "aiml", "research scientist", "audio", "data scientist")):
+        return ["Python", "Machine Learning", "Model Deployment", "PyTorch"], ["Distributed Systems", "Algorithms", "Deep Learning"]
 
+    if any(k in clean for k in ("software engineer", "backend", "frontend", "developer", "looker", "platform", "full stack")):
+        if len(text.strip()) > 50 or "Opportunity Compatibility" in text:
+            if any(f in clean for f in ("frontend", "ui", "react", "web", "full stack")):
+                return ["React", "TypeScript", "JavaScript", "CSS"], ["Next.js", "Tailwind CSS", "REST APIs", "GraphQL"]
+            return ["Distributed Systems", "SQL", "API Design"], ["Docker", "Kubernetes", "Microservices", "CI/CD", "AWS"]
+
+    # 2. Extract explicitly mentioned common skills from title and description
     found: list[str] = []
-    text_lower = f" {clean.lower()} {text.lower()} "
+    text_lower = f" {clean} {text.lower()} "
     for skill in COMMON_SKILLS:
-        if skill.lower() == "ai" and not any(k in clean.lower() for k in ("ai ", " ai", "artificial intelligence")):
+        if skill.lower() == "ai" and not any(k in clean for k in ("ai ", " ai", "artificial intelligence")):
             continue
         pattern = r"\b" + re.escape(skill.lower()) + r"\b"
         if re.search(pattern, text_lower):
             found.append(skill)
     if found:
-        return found[:4], found[4:7] if len(found) > 4 else []
-
-    # If role is software/backend/platform and has substantial description text or nav soup
-    if any(k in clean.lower() for k in ("software engineer", "backend", "frontend", "developer", "looker", "platform")):
-        if len(text.strip()) > 50 or "Opportunity Compatibility" in text:
-            if any(f in tl for f in ("frontend", "ui", "react", "web")):
-                return ["React", "TypeScript", "JavaScript", "CSS"], ["Next.js", "GraphQL", "REST APIs"]
-            return ["Distributed Systems", "SQL", "API Design"], ["Docker", "Kubernetes", "Microservices", "CI/CD"]
+        return found[:4], found[4:8] if len(found) > 4 else []
 
     return [], []
 
@@ -201,7 +196,14 @@ def ai_verify_job_opening(
                 f"Snippet: {snippet[:400]}\n\n"
                 f"Output valid JSON ONLY: {{\"is_job_opening\": true/false, \"clean_title\": \"...\", \"reason\": \"...\"}}"
             )
-            for model_candidate in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.0-flash"):
+            for model_candidate in (
+                "gemini-2.5-flash-lite",
+                "gemini-flash-lite-latest",
+                "gemini-3.1-flash-lite",
+                "gemini-3.5-flash-lite",
+                "gemini-2.5-flash",
+                "gemini-flash-latest",
+            ):
                 try:
                     resp = client.models.generate_content(
                         model=model_candidate,
@@ -219,7 +221,7 @@ def ai_verify_job_opening(
                 except Exception:
                     continue
         except Exception as e:
-            logger.debug("Gemini AI job classifier fallback: %s", e)
+            logger.warning("Gemini AI job classifier fallback: %s", e)
 
     # 2. Local AI Heuristic Verification
     parsed = urlparse(url)
