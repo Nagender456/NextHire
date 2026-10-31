@@ -103,14 +103,30 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
             if entity.get("confirmed_by_user", True)
         )
     )
+    if not user_skills:
+        required = _skills(job.required_skills)
+        preferred = _skills(job.preferred_skills)
+        return JobIntelligence(
+            job=job,
+            fit_score=0,
+            recommendation="lower_match",
+            recommendation_reason="0% fit: Add your skills in the Career Knowledge Base to see your match score.",
+            evidence=["No skills configured on profile"],
+            matched_required_skills=[],
+            matched_preferred_skills=[],
+            missing_required_skills=sorted(required.values()),
+            missing_preferred_skills=sorted(preferred.values()),
+            relevant_projects=[],
+            learning_opportunities=[_learning(s, True) for s in sorted(required.values())[:3]],
+        )
     required = _skills(job.required_skills)
     preferred = _skills(job.preferred_skills)
     matched_required = sorted(set(required) & set(user_skills))
     matched_preferred = sorted(set(preferred) & set(user_skills))
     missing_required = sorted(set(required) - set(user_skills))
     missing_preferred = sorted(set(preferred) - set(user_skills))
-    required_score = len(matched_required) / len(required) if required else 1
-    preferred_score = len(matched_preferred) / len(preferred) if preferred else 1
+    required_score = len(matched_required) / len(required) if required else 0
+    preferred_score = len(matched_preferred) / len(preferred) if preferred else 0
     if required and preferred:
         raw_score = (required_score * 0.7 + preferred_score * 0.3) * 100
     elif required:

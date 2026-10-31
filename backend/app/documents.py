@@ -198,7 +198,7 @@ def _extract_with_gemini(text: str) -> list[dict[str, object]] | None:
             "}\n\n"
             f"Resume Text:\n{text[:15000]}"
         )
-        for model_candidate in ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"):
+        for model_candidate in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.0-flash"):
             try:
                 resp = client.models.generate_content(
                     model=model_candidate,

@@ -103,8 +103,66 @@ class AuthStore:
                 try:
                     self.profiles[user_id] = CareerProfile.model_validate(p_data)
                 except Exception:
-                    self.profiles[user_id] = CareerProfile(user_id=user_id)
+                    pass
                 self._init_user_collections(user_id)
+        import time as _t
+        now = _t.time()
+        try:
+            for s in self._mongo_db.sessions.find({"expires_at": {"$gt": now}}):
+                tok = s.get("token")
+                uid = s.get("user_id")
+                exp = s.get("expires_at", now + 86400 * 30)
+                if tok and uid:
+                    self.sessions[tok] = uid
+                    self.session_expires_at[tok] = float(exp)
+        except Exception:
+            pass
+
+    def save_session(self, token: str, user_id: str, expires_at: float) -> None:
+        self.sessions[token] = user_id
+        self.session_expires_at[token] = expires_at
+        if self._mongo_db is not None:
+            try:
+                self._mongo_db.sessions.update_one(
+                    {"token": token},
+                    {"$set": {"token": token, "user_id": user_id, "expires_at": expires_at}},
+                    upsert=True,
+                )
+            except Exception:
+                pass
+
+    def get_session_user_id(self, token: str) -> str | None:
+        import time as _t
+        now = _t.time()
+        if not token or token in self.revoked_sessions:
+            return None
+        if token in self.sessions:
+            if self.session_expires_at.get(token, 0) > now:
+                return self.sessions[token]
+            self.sessions.pop(token, None)
+            self.session_expires_at.pop(token, None)
+            return None
+        if self._mongo_db is not None:
+            try:
+                doc = self._mongo_db.sessions.find_one({"token": token, "expires_at": {"$gt": now}})
+                if doc and doc.get("user_id"):
+                    uid = doc["user_id"]
+                    self.sessions[token] = uid
+                    self.session_expires_at[token] = float(doc.get("expires_at", now + 86400))
+                    return uid
+            except Exception:
+                pass
+        return None
+
+    def revoke_session(self, token: str) -> None:
+        self.sessions.pop(token, None)
+        self.session_expires_at.pop(token, None)
+        self.revoked_sessions.add(token)
+        if self._mongo_db is not None:
+            try:
+                self._mongo_db.sessions.delete_one({"token": token})
+            except Exception:
+                pass
 
     def set_user_role(self, user_id: str, role: UserRole | str) -> None:
         role_val = role.value if isinstance(role, UserRole) else str(role)

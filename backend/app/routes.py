@@ -984,10 +984,22 @@ async def scrape_naukri_jobs_endpoint(
 async def list_jobs(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    _user: User = Depends(require_user),
+    user: User = Depends(require_user),
 ) -> list[Job]:
-    jobs = [job for job in service.list_jobs() if job.status == "open"]
+    profile = auth_store.get_profile(user.id)
+    dismissed = set(getattr(profile, "dismissed_job_ids", []))
+    jobs = [job for job in service.list_jobs() if job.status == "open" and job.id not in dismissed]
     return jobs[offset : offset + limit]
+
+
+@router.post("/jobs/{job_id}/dismiss")
+async def dismiss_job(job_id: str, user: User = Depends(require_user)) -> dict[str, Any]:
+    profile = auth_store.get_profile(user.id)
+    dismissed = list(getattr(profile, "dismissed_job_ids", []))
+    if job_id not in dismissed:
+        dismissed.append(job_id)
+        auth_store.update_profile(user.id, ProfileUpdate(dismissed_job_ids=dismissed))
+    return {"status": "dismissed", "job_id": job_id, "dismissed_count": len(dismissed)}
 
 
 @router.get("/jobs/{job_id}", response_model=Job)

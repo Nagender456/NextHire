@@ -56,6 +56,7 @@ import {
   listNotifications,
   markNotificationRead,
   scrapeNaukriJobs,
+  dismissJob,
   generateResume,
   listResumes,
   updateResume,
@@ -306,6 +307,27 @@ function cleanJobTitle(rawTitle = "") {
   return cleaned || rawTitle;
 }
 
+export function deduplicateJobsList(jobsList) {
+  if (!Array.isArray(jobsList)) return [];
+  const seenUrls = new Set();
+  const seenKeys = new Set();
+  const seenIds = new Set();
+  const unique = [];
+  for (const j of jobsList) {
+    if (!j || !j.id) continue;
+    if (seenIds.has(j.id)) continue;
+    const normUrl = (j.url || "").trim().toLowerCase().replace(/\/$/, "");
+    const normKey = `${(j.company_id || "").trim().toLowerCase()}::${(j.title || "").trim().toLowerCase()}`;
+    if (normUrl && seenUrls.has(normUrl)) continue;
+    if (seenKeys.has(normKey)) continue;
+    if (normUrl) seenUrls.add(normUrl);
+    seenKeys.add(normKey);
+    seenIds.add(j.id);
+    unique.push(j);
+  }
+  return unique;
+}
+
 function getCompanyDetails(companyId = "", companies = []) {
   const company = (companies || []).find((c) => c.id === companyId);
   let name = company?.name;
@@ -474,19 +496,24 @@ export function getCandidateDomain(candidateSkills = [], headline = "") {
 }
 
 export function getJobSkillsAndScore(job, userSkills = [], candidateHeadline = "") {
-  // Candidate skills with foundation baseline fallback if profile is empty
-  const rawSkills =
-    userSkills && userSkills.length > 0
-      ? userSkills
-      : ["Python", "C++", "React", "JavaScript", "Algorithms", "Data Structures"];
-
+  const rawSkills = Array.isArray(userSkills) ? userSkills : [];
   const candidateSkills = flattenCandidateSkills(rawSkills);
-  const candidateDomain = getCandidateDomain(candidateSkills, candidateHeadline);
-  const jobDomain = getRoleDomain(job.title || "");
-  const isDomainMismatch = candidateDomain === "engineering" && jobDomain !== "engineering";
-
   const required = job.required_skills || [];
   const preferred = job.preferred_skills || [];
+  const jobDomain = getRoleDomain(job.title || "");
+
+  // If candidate has no skills configured, do not inflate scores. Return 0% match!
+  if (candidateSkills.length === 0) {
+    return {
+      matched: [],
+      missing: required.length > 0 ? required : preferred,
+      score: 0,
+      domain: jobDomain,
+    };
+  }
+
+  const candidateDomain = getCandidateDomain(candidateSkills, candidateHeadline);
+  const isDomainMismatch = candidateDomain === "engineering" && jobDomain !== "engineering";
 
   const isSkillMatched = (s) => matchesSkill(s, candidateSkills);
 
@@ -503,34 +530,279 @@ export function getJobSkillsAndScore(job, userSkills = [], candidateHeadline = "
   if (required.length > 0 && preferred.length > 0) {
     const reqRatio = matchedRequired.length / required.length;
     const prefRatio = matchedPreferred.length / preferred.length;
-    score = Math.round((reqRatio * 0.75 + prefRatio * 0.25) * 100);
-  } else if (required.length === 1) {
-    // Single required skill: never inflate to 100% since 1 skill does not satisfy a full role
+    score = Math.round((reqRatio * 0.8 + prefRatio * 0.2) * 100);
+  } else if (required.length > 0) {
     const reqRatio = matchedRequired.length / required.length;
-    score = Math.round(reqRatio * 65);
-  } else if (required.length > 1) {
-    score = Math.round((matchedRequired.length / required.length) * 100);
+    score = Math.round(reqRatio * 100);
   } else if (preferred.length > 0) {
-    score = Math.round((matchedPreferred.length / preferred.length) * 75);
+    const prefRatio = matchedPreferred.length / preferred.length;
+    score = Math.round(prefRatio * 75);
   } else {
-    // If no skills listed on the job, check title keyword alignment
-    if (isDomainMismatch) {
-      score = 8;
-    } else {
-      const titleLower = (job.title || "").toLowerCase();
-      const hasMatchInTitle = candidateSkills.some((s) => s.length >= 3 && titleLower.includes(s.toLowerCase()));
-      score = hasMatchInTitle ? 75 : 50;
-    }
+    // If no explicit skills listed on job, check if candidate skill appears in title
+    const titleLower = (job.title || "").toLowerCase();
+    const hasMatchInTitle = candidateSkills.some(
+      (s) => s.length >= 3 && titleLower.includes(s.toLowerCase())
+    );
+    score = hasMatchInTitle ? 60 : 0;
   }
 
   // Cross-domain mismatch penalty: software engineers applying to marketing, finance, ops roles
   if (isDomainMismatch) {
-    score = Math.min(18, Math.max(6, Math.round(score * 0.15)));
+    score = Math.min(10, Math.round(score * 0.15));
   }
 
   score = Math.max(0, Math.min(100, score));
 
   return { matched, missing, score, domain: jobDomain };
+}
+
+function ApplicationNextStepsModal({
+  job,
+  application,
+  onClose,
+  onUpdateStatus,
+  onTailorResume,
+}) {
+  const [status, setStatus] = useState(application?.status || "applied");
+  const [notes, setNotes] = useState(application?.notes || "");
+  const [interviewDate, setInterviewDate] = useState(
+    application?.interview_at ? application.interview_at.slice(0, 16) : ""
+  );
+  const [deadline, setDeadline] = useState(
+    application?.deadline ? application.deadline.slice(0, 16) : ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  const stages = [
+    { key: "applied", label: "Applied" },
+    { key: "interview", label: "Interviewing" },
+    { key: "offer", label: "Offer Received" },
+    { key: "saved", label: "Saved for Later" },
+  ];
+
+  const handleSelectStatus = async (newStatus) => {
+    setStatus(newStatus);
+    setSaving(true);
+    try {
+      if (application?.id) {
+        await updateApplication(application.id, { status: newStatus });
+      } else {
+        await createApplication({ job_id: job.id, status: newStatus });
+      }
+      if (onUpdateStatus) onUpdateStatus(job.id, newStatus);
+      setNotice(`Application moved to "${stages.find((s) => s.key === newStatus)?.label || newStatus}"!`);
+      setTimeout(() => setNotice(""), 2200);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveDetails = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        status,
+        notes,
+        interview_at: interviewDate ? new Date(interviewDate).toISOString() : null,
+        deadline: deadline ? new Date(deadline).toISOString() : null,
+      };
+      if (application?.id) {
+        await updateApplication(application.id, payload);
+      } else {
+        await createApplication({ job_id: job.id, ...payload });
+      }
+      setNotice("Interview date & notes saved successfully!");
+      setTimeout(() => setNotice(""), 2200);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="ai-modal-backdrop" onClick={onClose}>
+      <div className="ai-modal-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="ai-modal-header">
+          <div className="ai-modal-title-row">
+            <CheckCircle2 size={20} style={{ color: "#059669" }} />
+            <div>
+              <h3>Application Tracked</h3>
+              <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
+                {job.title} · {job.companyName || job.company_id}
+              </span>
+            </div>
+          </div>
+          <button className="ai-modal-close-btn" onClick={onClose} aria-label="Close modal">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="ai-modal-body" style={{ padding: "1.25rem 1.5rem" }}>
+          {notice && (
+            <div className="naukri-notice success" style={{ marginBottom: "1rem" }}>
+              {notice}
+            </div>
+          )}
+
+          {/* 1. Status Selection */}
+          <div style={{ marginBottom: "1.25rem" }}>
+            <label style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--colors-steel)", display: "block", marginBottom: "6px" }}>
+              Application Stage:
+            </label>
+            <div className="next-steps-status-chips">
+              {stages.map((st) => (
+                <button
+                  key={st.key}
+                  type="button"
+                  className={`next-steps-status-chip ${status === st.key ? "active" : ""}`}
+                  onClick={() => handleSelectStatus(st.key)}
+                  disabled={saving}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Optional Interview Date & Notes form */}
+          <form onSubmit={handleSaveDetails} style={{ background: "var(--colors-canvas-subtle)", padding: "1rem", borderRadius: "var(--rounded-lg)", border: "1px solid var(--colors-hairline)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "8px" }}>
+              <div>
+                <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--colors-slate)", display: "block", marginBottom: "4px" }}>
+                  Upcoming Interview Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={interviewDate}
+                  onChange={(e) => setInterviewDate(e.target.value)}
+                  className="naukri-input"
+                  style={{ width: "100%", padding: "6px 10px", fontSize: "12px" }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--colors-slate)", display: "block", marginBottom: "4px" }}>
+                  Application Deadline
+                </label>
+                <input
+                  type="datetime-local"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="naukri-input"
+                  style={{ width: "100%", padding: "6px 10px", fontSize: "12px" }}
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--colors-slate)", display: "block", marginBottom: "4px" }}>
+                Notes / Next Action
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Followed up with recruiter, prepared design presentation..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="naukri-input"
+                style={{ width: "100%", padding: "6px 10px", fontSize: "12px" }}
+              />
+            </div>
+            <div style={{ marginTop: "10px", textAlign: "right" }}>
+              <button type="submit" className="button-secondary" style={{ padding: "5px 12px", fontSize: "12px" }} disabled={saving}>
+                {saving ? "Saving..." : "Save Notes & Dates"}
+              </button>
+            </div>
+          </form>
+
+          {/* 3. What would you like to do next? */}
+          <div style={{ marginTop: "1.5rem" }}>
+            <h4 style={{ margin: "0 0 4px 0", fontSize: "13.5px", fontWeight: 700, color: "var(--colors-ink)" }}>
+              What would you like to do next?
+            </h4>
+            <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "var(--colors-steel)" }}>
+              Recommended actions to maximize your chances for this role:
+            </p>
+
+            <div className="next-steps-action-grid">
+              {/* Option A: Tailor Resume */}
+              <div
+                className="next-steps-action-card"
+                onClick={() => {
+                  onClose();
+                  if (onTailorResume) onTailorResume(job);
+                }}
+              >
+                <div>
+                  <div className="next-steps-action-card-header">
+                    <div className="next-steps-action-icon">
+                      <Sparkles size={16} />
+                    </div>
+                    <h5 className="next-steps-action-title">Tailor Resume for Role</h5>
+                  </div>
+                  <p className="next-steps-action-desc" style={{ marginTop: "8px" }}>
+                    Generate an ATS-optimized resume emphasizing {job.title} keywords.
+                  </p>
+                </div>
+                <div className="next-steps-action-footer">
+                  <span>Tailor LaTeX Resume</span>
+                  <ArrowRight size={12} />
+                </div>
+              </div>
+
+              {/* Option B: View in Applications Pipeline */}
+              <div
+                className="next-steps-action-card"
+                onClick={() => {
+                  window.location.href = "/applications";
+                }}
+              >
+                <div>
+                  <div className="next-steps-action-card-header">
+                    <div className="next-steps-action-icon green">
+                      <CheckCircle2 size={16} />
+                    </div>
+                    <h5 className="next-steps-action-title">View Applications Tracker</h5>
+                  </div>
+                  <p className="next-steps-action-desc" style={{ marginTop: "8px" }}>
+                    Manage pipeline stages, interview reminders, and notes.
+                  </p>
+                </div>
+                <div className="next-steps-action-footer" style={{ color: "#059669" }}>
+                  <span>Open Pipeline Tracker</span>
+                  <ArrowRight size={12} />
+                </div>
+              </div>
+
+              {/* Option C: Continue Browsing */}
+              <div
+                className="next-steps-action-card"
+                onClick={onClose}
+              >
+                <div>
+                  <div className="next-steps-action-card-header">
+                    <div className="next-steps-action-icon amber">
+                      <Compass size={16} />
+                    </div>
+                    <h5 className="next-steps-action-title">Keep Browsing Roles</h5>
+                  </div>
+                  <p className="next-steps-action-desc" style={{ marginTop: "8px" }}>
+                    Discover more verified openings matched with your skills.
+                  </p>
+                </div>
+                <div className="next-steps-action-footer" style={{ color: "#d97706" }}>
+                  <span>Back to Job Feed</span>
+                  <ArrowRight size={12} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function JobIntelligenceModal({ job, onClose }) {
@@ -768,10 +1040,19 @@ function JobsPage() {
   const [saveError, setSaveError] = useState("");
   const [savingJobId, setSavingJobId] = useState("");
   const [savedJobIds, setSavedJobIds] = useState(new Set());
+  const [applicationsMap, setApplicationsMap] = useState(new Map());
+  const [dismissedJobIds, setDismissedJobIds] = useState(new Set());
+  const [activeNextStepsJob, setActiveNextStepsJob] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [intelligence, setIntelligence] = useState(null);
   const [intelligenceError, setIntelligenceError] = useState("");
   const [feedbackSuccess, setFeedbackSuccess] = useState("");
+
+  // Naukri Live Scraper state
+  const [naukriRole, setNaukriRole] = useState("Software Engineer");
+  const [naukriLoc, setNaukriLoc] = useState("India");
+  const [scrapingNaukri, setScrapingNaukri] = useState(false);
+  const [naukriNotice, setNaukriNotice] = useState(null);
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -802,17 +1083,23 @@ function JobsPage() {
       listApplications().catch(() => []),
     ])
       .then(([nextJobs, nextCompanies, nextProfile, careerSkills, applications]) => {
-        setJobs(nextJobs);
+        setJobs(deduplicateJobsList(nextJobs));
         setCompanies(nextCompanies);
         const allSkills = [
           ...(nextProfile?.skills || []),
           ...(Array.isArray(careerSkills) ? careerSkills.map((s) => s.name) : []),
         ];
         setProfile({ ...(nextProfile || {}), skills: allSkills });
+        const dismissed = new Set(nextProfile?.dismissed_job_ids || []);
+        setDismissedJobIds(dismissed);
         if (Array.isArray(applications)) {
-          const savedIds = new Set(
-            applications.filter((a) => a.status === "saved").map((a) => a.job_id)
-          );
+          const appMap = new Map();
+          const savedIds = new Set();
+          applications.forEach((a) => {
+            appMap.set(a.job_id, a);
+            if (a.status === "saved") savedIds.add(a.job_id);
+          });
+          setApplicationsMap(appMap);
           setSavedJobIds(savedIds);
         }
       })
@@ -822,6 +1109,48 @@ function JobsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleTriggerNaukriScrape = (e) => {
+    if (e) e.preventDefault();
+    setScrapingNaukri(true);
+    setNaukriNotice(null);
+    scrapeNaukriJobs({
+      search_term: naukriRole || "Software Engineer",
+      location: naukriLoc || "India",
+      results_wanted: 15,
+    })
+      .then((newJobs) => {
+        const merged = deduplicateJobsList([...(newJobs || []), ...jobs]);
+        setJobs(merged);
+        setNaukriNotice({
+          type: "success",
+          text: `Successfully scraped ${newJobs?.length || 0} live openings from Naukri!`,
+        });
+        setTimeout(() => setNaukriNotice(null), 4000);
+      })
+      .catch((err) => {
+        setNaukriNotice({
+          type: "error",
+          text: `Naukri scrape failed: ${err.message}`,
+        });
+        setTimeout(() => setNaukriNotice(null), 4000);
+      })
+      .finally(() => setScrapingNaukri(false));
+  };
+
+  const handleDismissJob = (jobId) => {
+    setDismissedJobIds((prev) => new Set(prev).add(jobId));
+    dismissJob(jobId).catch((err) => console.error("Dismiss failed", err));
+  };
+
+  const handleMarkApplied = (job) => {
+    createApplication({ job_id: job.id, status: "applied" })
+      .then((app) => {
+        setApplicationsMap((prev) => new Map(prev).set(job.id, app));
+        setActiveNextStepsJob(job);
+      })
+      .catch((err) => setSaveError(err.message));
+  };
 
   const inspectJob = (job) => {
     setSelectedJob(job);
@@ -841,8 +1170,9 @@ function JobsPage() {
       setSavingJobId("");
     } else {
       createApplication({ job_id: job.id, status: "saved" })
-        .then(() => {
+        .then((app) => {
           setSavedJobIds((prev) => new Set(prev).add(job.id));
+          setApplicationsMap((prev) => new Map(prev).set(job.id, app));
         })
         .catch((requestError) => setSaveError(requestError.message))
         .finally(() => setSavingJobId(""));
@@ -851,7 +1181,8 @@ function JobsPage() {
 
   // Filter & Sort Jobs
   const filteredJobs = useMemo(() => {
-    return jobs
+    return deduplicateJobsList(jobs)
+      .filter((job) => !dismissedJobIds.has(job.id))
       .map((job) => {
         const skillsAndScore = getJobSkillsAndScore(
           job,
@@ -926,6 +1257,7 @@ function JobsPage() {
     savedOnly,
     sortBy,
     savedJobIds,
+    dismissedJobIds,
   ]);
 
   const pagedJobs = paginateItems(filteredJobs, page);
@@ -975,6 +1307,47 @@ function JobsPage() {
       </div>
 
       {saveError && <p className="error-message" role="alert">{saveError}</p>}
+
+      {/* Naukri Live Discovery Bar */}
+      <div className="naukri-scrape-banner">
+        <div className="naukri-banner-header">
+          <div className="naukri-badge-tag">
+            <span className="pulse-dot active" />
+            <span>Naukri Live Scraper</span>
+          </div>
+          <span className="naukri-banner-subtext">Direct real-time job scraping & deduplication via JobSpy</span>
+        </div>
+        <form className="naukri-quick-form" onSubmit={handleTriggerNaukriScrape}>
+          <input
+            type="text"
+            placeholder="Role title (e.g. Software Engineer, React Developer)..."
+            value={naukriRole}
+            onChange={(e) => setNaukriRole(e.target.value)}
+            className="naukri-input"
+          />
+          <input
+            type="text"
+            placeholder="Location (e.g. India, Bengaluru, Remote)..."
+            value={naukriLoc}
+            onChange={(e) => setNaukriLoc(e.target.value)}
+            className="naukri-input location"
+            style={{ maxWidth: "220px" }}
+          />
+          <button
+            type="submit"
+            className="primary-button naukri-scrape-btn"
+            disabled={scrapingNaukri}
+          >
+            <RefreshCw size={13} className={scrapingNaukri ? "spin" : ""} />
+            <span>{scrapingNaukri ? "Scraping Naukri..." : "Scrape Naukri Live"}</span>
+          </button>
+        </form>
+        {naukriNotice && (
+          <div className={`naukri-notice ${naukriNotice.type}`}>
+            {naukriNotice.text}
+          </div>
+        )}
+      </div>
 
       {/* Top Filter & Search Bar */}
       <div className="job-feed-controls">
@@ -1164,9 +1537,20 @@ function JobsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
-                    <Sparkles size={12} />
-                    <span>{job.score}% Match</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
+                      <Sparkles size={12} />
+                      <span>{job.score}% Match</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="job-dismiss-btn"
+                      onClick={() => handleDismissJob(job.id)}
+                      title="Remove role / Not interested"
+                      aria-label="Remove job"
+                    >
+                      <X size={15} />
+                    </button>
                   </div>
                 </div>
 
@@ -1199,6 +1583,27 @@ function JobsPage() {
                 {/* Action Toolbar */}
                 <div className="job-card-actions">
                   <div className="action-buttons-group">
+                    {applicationsMap.has(job.id) && applicationsMap.get(job.id).status !== "saved" ? (
+                      <button
+                        type="button"
+                        className="mark-applied-btn is-applied"
+                        onClick={() => setActiveNextStepsJob(job)}
+                        title="Application recorded - click to update status or view next steps"
+                      >
+                        <CheckCircle2 size={13} />
+                        <span>Applied ({applicationsMap.get(job.id).status})</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="mark-applied-btn"
+                        onClick={() => handleMarkApplied(job)}
+                        title="Mark this role as applied"
+                      >
+                        <CheckCircle2 size={13} />
+                        <span>Mark Applied</span>
+                      </button>
+                    )}
                     <button
                       className="tailor-resume-btn"
                       style={{ padding: "6px 12px", fontSize: "12.5px" }}
@@ -1262,6 +1667,24 @@ function JobsPage() {
             Next
           </button>
         </nav>
+      )}
+
+      {/* Application Next Steps Modal */}
+      {activeNextStepsJob && (
+        <ApplicationNextStepsModal
+          job={activeNextStepsJob}
+          application={applicationsMap.get(activeNextStepsJob.id)}
+          onClose={() => setActiveNextStepsJob(null)}
+          onUpdateStatus={(jobId, nextStatus) => {
+            setApplicationsMap((prev) => {
+              const updated = new Map(prev);
+              const existing = updated.get(jobId) || { job_id: jobId };
+              updated.set(jobId, { ...existing, status: nextStatus });
+              return updated;
+            });
+          }}
+          onTailorResume={(job) => handleTailorJob(job)}
+        />
       )}
 
       {/* AI Explanation Modal */}
@@ -2750,6 +3173,15 @@ function DashboardContent({ dashboard, error, onReload, user }) {
   const [selectedJobForIntelligence, setSelectedJobForIntelligence] = useState(null);
   const [tailoredResumeForPreview, setTailoredResumeForPreview] = useState(null);
   const [tailoringId, setTailoringId] = useState("");
+  const [activeNextStepsJob, setActiveNextStepsJob] = useState(null);
+  const [dismissedJobIds, setDismissedJobIds] = useState(
+    () => new Set(dashboard?.profile?.dismissed_job_ids || [])
+  );
+  const [applicationsMap, setApplicationsMap] = useState(() => {
+    const m = new Map();
+    (dashboard?.applications || []).forEach((a) => m.set(a.job_id, a));
+    return m;
+  });
 
   const handleTailorJob = (job) => {
     setTailoringId(job.id);
@@ -2762,6 +3194,23 @@ function DashboardContent({ dashboard, error, onReload, user }) {
         setNoticeType("error");
       })
       .finally(() => setTailoringId(""));
+  };
+
+  const handleDismissJob = (jobId) => {
+    setDismissedJobIds((prev) => new Set(prev).add(jobId));
+    dismissJob(jobId).catch((err) => console.error("Dismiss failed", err));
+  };
+
+  const handleMarkApplied = (job) => {
+    createApplication({ job_id: job.id, status: "applied" })
+      .then((app) => {
+        setApplicationsMap((prev) => new Map(prev).set(job.id, app));
+        setActiveNextStepsJob(job);
+      })
+      .catch((err) => {
+        setNotice(`Failed to record application: ${err.message}`);
+        setNoticeType("error");
+      });
   };
 
   useEffect(() => {
@@ -2837,7 +3286,7 @@ function DashboardContent({ dashboard, error, onReload, user }) {
   const interviewCount = applications.filter((a) => a.status === "interview" || a.status === "interviewing").length;
   const offerCount = applications.filter((a) => a.status === "offer").length;
 
-  // Filter recommended jobs to remove bogus non-job titles
+  // Filter recommended jobs to remove bogus non-job titles and dismissed roles
   const isBogusTitle = (t = "") => {
     const l = t.toLowerCase();
     return (
@@ -2850,7 +3299,8 @@ function DashboardContent({ dashboard, error, onReload, user }) {
     );
   };
 
-  const rawRecommended = (dashboard.recommended_jobs || []).filter((j) => !isBogusTitle(j.title));
+  const rawRecommended = deduplicateJobsList(dashboard.recommended_jobs || [])
+    .filter((j) => !isBogusTitle(j.title) && !dismissedJobIds.has(j.id));
   const userSkills = profile?.skills || [];
 
   return (
@@ -3072,9 +3522,20 @@ function DashboardContent({ dashboard, error, onReload, user }) {
                       </div>
                     </div>
 
-                    <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
-                      <Sparkles size={11} />
-                      <span>{score}% Match</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
+                        <Sparkles size={11} />
+                        <span>{score}% Match</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="job-dismiss-btn"
+                        onClick={() => handleDismissJob(job.id)}
+                        title="Remove role / Not interested"
+                        aria-label="Remove job"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                   </div>
 
@@ -3102,6 +3563,27 @@ function DashboardContent({ dashboard, error, onReload, user }) {
                   {/* Action Bar */}
                   <div className="recommended-actions-row">
                     <div className="recommended-actions-group">
+                      {applicationsMap.has(job.id) && applicationsMap.get(job.id).status !== "saved" ? (
+                        <button
+                          type="button"
+                          className="mark-applied-btn is-applied"
+                          onClick={() => setActiveNextStepsJob(job)}
+                          title="Application recorded - click to update status or view next steps"
+                        >
+                          <CheckCircle2 size={13} />
+                          <span>Applied ({applicationsMap.get(job.id).status})</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="mark-applied-btn"
+                          onClick={() => handleMarkApplied(job)}
+                          title="Mark this role as applied"
+                        >
+                          <CheckCircle2 size={13} />
+                          <span>Mark Applied</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="tailor-resume-btn"
@@ -3143,6 +3625,25 @@ function DashboardContent({ dashboard, error, onReload, user }) {
         <JobIntelligenceModal
           job={selectedJobForIntelligence}
           onClose={() => setSelectedJobForIntelligence(null)}
+        />
+      )}
+
+      {/* Application Next Steps Modal */}
+      {activeNextStepsJob && (
+        <ApplicationNextStepsModal
+          job={activeNextStepsJob}
+          application={applicationsMap.get(activeNextStepsJob.id)}
+          onClose={() => setActiveNextStepsJob(null)}
+          onUpdateStatus={(jobId, nextStatus) => {
+            setApplicationsMap((prev) => {
+              const updated = new Map(prev);
+              const existing = updated.get(jobId) || { job_id: jobId };
+              updated.set(jobId, { ...existing, status: nextStatus });
+              return updated;
+            });
+            if (onReload) onReload();
+          }}
+          onTailorResume={(job) => handleTailorJob(job)}
         />
       )}
 

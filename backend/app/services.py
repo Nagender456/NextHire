@@ -22,7 +22,24 @@ class FoundationService:
         return self.data.get_profile()
 
     def list_jobs(self) -> list[Job]:
-        return [*self.data.list_jobs(), *ingestion_store.jobs.values()]
+        all_jobs = [*ingestion_store.jobs.values(), *self.data.list_jobs()]
+        seen_keys: set[str] = set()
+        deduped: list[Job] = []
+        for job in all_jobs:
+            norm_title = " ".join((job.title or "").lower().split())
+            norm_company = " ".join((job.company_id or "").lower().split())
+            norm_url = str(job.url or "").strip().rstrip("/")
+            if norm_url and norm_url in seen_keys:
+                continue
+            ct_key = f"{norm_company}::{norm_title}"
+            if ct_key in seen_keys or job.id in seen_keys:
+                continue
+            if norm_url:
+                seen_keys.add(norm_url)
+            seen_keys.add(ct_key)
+            seen_keys.add(job.id)
+            deduped.append(job)
+        return deduped
 
     def list_applications(self) -> list[Application]:
         return self.data.list_applications()
@@ -37,6 +54,28 @@ class FoundationService:
             raise ValueError("JOB_NOT_FOUND")
         job = self.get_job(payload.job_id)
         now = datetime.now(UTC)
+        existing = next(
+            (a for a in self.data.applications if a.user_id == user_id and a.job_id == payload.job_id),
+            None,
+        )
+        if existing:
+            existing.status = payload.status
+            if payload.status != ApplicationStatus.SAVED and not existing.applied_at:
+                existing.applied_at = now
+            if payload.notes:
+                existing.notes = payload.notes
+            if payload.deadline is not None:
+                existing.deadline = payload.deadline
+            if payload.interview_at is not None:
+                existing.interview_at = payload.interview_at
+            if payload.next_action:
+                existing.next_action = payload.next_action
+            if payload.resume_version_id:
+                existing.resume_version_id = payload.resume_version_id
+            existing.updated_at = now
+            from app.auth_store import auth_store
+            auth_store.add_application_activity(user_id, existing.id, f"updated_{payload.status}")
+            return existing
         application = Application(
             id=f"application-{len(self.data.applications) + 1}",
             user_id=user_id,

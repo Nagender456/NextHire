@@ -84,6 +84,7 @@ def test_dashboard_returns_career_search_summary() -> None:
             "preferred_skills": {},
             "preferred_locations": [],
             "target_companies": [],
+            "dismissed_job_ids": [],
         },
         "recommended_jobs": [],
         "applications": [],

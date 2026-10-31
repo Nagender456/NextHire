@@ -403,3 +403,9 @@ export function scrapeNaukriJobs(payload = {}) {
   });
 }
 
+export function dismissJob(jobId) {
+  return request(`/api/v1/jobs/${jobId}/dismiss`, {
+    method: "POST",
+  });
+}
+

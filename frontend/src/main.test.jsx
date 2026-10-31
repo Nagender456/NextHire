@@ -5,6 +5,7 @@ import {
   getCandidateDomain,
   matchesSkill,
   flattenCandidateSkills,
+  deduplicateJobsList,
 } from "./main";
 
 describe("Job Matching Algorithm & Domain Safety", () => {
@@ -17,6 +18,32 @@ describe("Job Matching Algorithm & Domain Safety", () => {
     "Web & AI Engineering:MERN Stack",
     "FastAPI",
   ];
+
+  it("returns 0% match score when new user has no skills configured", () => {
+    const job = {
+      title: "Full Stack Software Engineer",
+      required_skills: ["Python", "React", "JavaScript"],
+      preferred_skills: ["Docker"],
+    };
+    const res = getJobSkillsAndScore(job, [], "");
+    expect(res.score).toBe(0);
+    expect(res.matched).toEqual([]);
+    expect(res.missing).toEqual(["Python", "React", "JavaScript"]);
+  });
+
+  it("strictly deduplicates jobs by ID, URL, and company::title", () => {
+    const rawJobs = [
+      { id: "j1", title: "Software Engineer", company_id: "google", url: "https://google.com/jobs/1" },
+      { id: "j2", title: "Software Engineer", company_id: "google", url: "https://google.com/jobs/1/" }, // dupe URL
+      { id: "j3", title: "Software Engineer", company_id: "google", url: "https://google.com/jobs/diff" }, // dupe company::title
+      { id: "j1", title: "Different Title", company_id: "apple", url: "https://apple.com/jobs/2" }, // dupe ID
+      { id: "j4", title: "Frontend Developer", company_id: "stripe", url: "https://stripe.com/jobs/4" },
+    ];
+    const deduped = deduplicateJobsList(rawJobs);
+    expect(deduped).toHaveLength(2);
+    expect(deduped[0].id).toBe("j1");
+    expect(deduped[1].id).toBe("j4");
+  });
 
   it("does not match short tokens inside other words like 'FastAPI' matching 'AI'", () => {
     expect(matchesSkill("AI", ["FastAPI"])).toBe(false);

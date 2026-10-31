@@ -201,7 +201,7 @@ def ai_verify_job_opening(
                 f"Snippet: {snippet[:400]}\n\n"
                 f"Output valid JSON ONLY: {{\"is_job_opening\": true/false, \"clean_title\": \"...\", \"reason\": \"...\"}}"
             )
-            for model_candidate in ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"):
+            for model_candidate in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.0-flash"):
                 try:
                     resp = client.models.generate_content(
                         model=model_candidate,

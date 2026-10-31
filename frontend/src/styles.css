@@ -3103,5 +3103,253 @@ button:not([class]):hover {
   white-space: pre-line;
 }
 
+/* -------------------------------------------------------------
+   Naukri Live Scraper Control Bar & Dismiss / Applied Buttons
+   ------------------------------------------------------------- */
+.naukri-scrape-banner {
+  background: linear-gradient(135deg, rgba(86, 69, 212, 0.05) 0%, rgba(13, 148, 136, 0.04) 100%);
+  border: 1px solid var(--colors-hairline-strong);
+  border-radius: var(--rounded-lg);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.naukri-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.naukri-badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--colors-primary);
+  background: rgba(86, 69, 212, 0.08);
+  padding: 3px 8px;
+  border-radius: var(--rounded-full);
+}
+
+.naukri-banner-subtext {
+  font-size: 12px;
+  color: var(--colors-steel);
+}
+
+.naukri-quick-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.naukri-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 12px;
+  border: 1px solid var(--colors-hairline-strong);
+  border-radius: var(--rounded-md);
+  font-size: 13px;
+  color: var(--colors-ink);
+  background: var(--colors-canvas);
+  outline: none;
+  transition: border-color 150ms ease;
+}
+
+.naukri-input:focus {
+  border-color: var(--colors-primary);
+}
+
+.naukri-scrape-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.naukri-notice {
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border-radius: var(--rounded-md);
+  font-weight: 500;
+}
+
+.naukri-notice.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--colors-semantic-success);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.naukri-notice.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--colors-semantic-danger);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Mark as Applied & Dismiss Buttons */
+.mark-applied-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: var(--rounded-md);
+  cursor: pointer;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+  transition: all 150ms ease;
+}
+
+.mark-applied-btn:hover {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: #059669;
+}
+
+.mark-applied-btn.is-applied {
+  background: #059669;
+  color: #ffffff;
+  border-color: #059669;
+}
+
+.job-dismiss-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--rounded-md);
+  padding: 6px;
+  color: var(--colors-steel);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+}
+
+.job-dismiss-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--colors-semantic-danger);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Next Steps Modal */
+.next-steps-status-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 1rem 0;
+}
+
+.next-steps-status-chip {
+  padding: 6px 14px;
+  border-radius: var(--rounded-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--colors-hairline-strong);
+  background: var(--colors-canvas-subtle);
+  color: var(--colors-slate);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.next-steps-status-chip:hover {
+  border-color: var(--colors-primary);
+  color: var(--colors-ink);
+}
+
+.next-steps-status-chip.active {
+  background: var(--colors-primary);
+  color: #ffffff;
+  border-color: var(--colors-primary);
+}
+
+.next-steps-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 1rem;
+}
+
+.next-steps-action-card {
+  border: 1px solid var(--colors-hairline-strong);
+  border-radius: var(--rounded-lg);
+  padding: 1rem;
+  background: var(--colors-canvas);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  text-align: left;
+}
+
+.next-steps-action-card:hover {
+  border-color: var(--colors-primary);
+  box-shadow: 0 4px 14px rgba(86, 69, 212, 0.08);
+  transform: translateY(-1px);
+}
+
+.next-steps-action-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.next-steps-action-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--rounded-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(86, 69, 212, 0.08);
+  color: var(--colors-primary);
+  flex-shrink: 0;
+}
+
+.next-steps-action-icon.green {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.next-steps-action-icon.amber {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.next-steps-action-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--colors-ink);
+  margin: 0;
+}
+
+.next-steps-action-desc {
+  font-size: 12px;
+  color: var(--colors-steel);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.next-steps-action-footer {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--colors-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 
 

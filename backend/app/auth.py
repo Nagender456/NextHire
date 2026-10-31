@@ -44,21 +44,13 @@ def login(payload: Credentials) -> tuple[User, str]:
             },
         )
     token = generate_token()
-    auth_store.sessions[token] = user.id
-    auth_store.session_expires_at[token] = time() + get_settings().session_ttl_seconds
+    auth_store.save_session(token, user.id, time() + get_settings().session_ttl_seconds)
     return user, token
 
 
 def current_user(request: Request) -> User:
     token = request.cookies.get(SESSION_COOKIE)
-    if token and (
-        token in auth_store.revoked_sessions
-        or auth_store.session_expires_at.get(token, 0) <= time()
-    ):
-        auth_store.sessions.pop(token, None)
-        auth_store.session_expires_at.pop(token, None)
-        auth_store.revoked_sessions.add(token)
-    user_id = auth_store.sessions.get(token or "")
+    user_id = auth_store.get_session_user_id(token or "")
     user = auth_store.get_user(user_id) if user_id else None
     if not user:
         raise HTTPException(
@@ -227,8 +219,7 @@ async def github_callback(code: str, state: str) -> tuple[User, str]:
 
 def _new_session(user: User) -> tuple[User, str]:
     token = generate_token()
-    auth_store.sessions[token] = user.id
-    auth_store.session_expires_at[token] = time() + get_settings().session_ttl_seconds
+    auth_store.save_session(token, user.id, time() + get_settings().session_ttl_seconds)
     return user, token
 
 

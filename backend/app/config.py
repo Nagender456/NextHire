@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     github_client_id: str = ""
     github_client_secret: str = ""
     github_redirect_uri: str = "http://localhost:8000/api/v1/auth/github/callback"
-    session_ttl_seconds: int = 60 * 60 * 24 * 7
+    session_ttl_seconds: int = 60 * 60 * 24 * 30
     job_queue_path: str = "nexthire-jobs.sqlite3"
     vector_index_path: str = ""
     metrics_enabled: bool = True

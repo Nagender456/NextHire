@@ -247,15 +247,23 @@ class PersonalizedSearch:
 
     def search(self, user_id: str, request: SearchRequest) -> SearchResponse:
         self.reindex(user_id)
-        profile_record = self.index.records[f"user:{user_id}:profile"]
-        query_text = f"{profile_record.text} {request.query}"
-        query_vector = self.index.provider.embed(query_text)
+        profile = auth_store.get_profile(user_id)
+        dismissed = set(getattr(profile, "dismissed_job_ids", []))
+        profile_record = self.index.records.get(f"user:{user_id}:profile")
+        profile_text = profile_record.text if profile_record else ""
+        query_text = f"{profile_text} {request.query}".strip()
+        query_vector = self.index.provider.embed(query_text) if query_text else [0.0] * self.index.provider.dimensions
         requested_terms = set(_TOKEN_RE.findall(request.query.lower()))
         jobs = {job.id: job for job in self.jobs_provider() if job.status == "open"}
+        user_skills = [s for s in getattr(profile, "skills", []) if s.strip()]
+        has_user_context = bool(user_skills or (profile.headline and profile.headline.strip()))
+        has_query = bool(request.query.strip())
         results: list[SearchResult] = []
         for record in self.index.records.values():
             metadata = record.metadata
             if metadata.user_id is not None or metadata.job_id not in jobs:
+                continue
+            if metadata.job_id in dismissed:
                 continue
             job = jobs[metadata.job_id]
             if request.company_id and job.company_id != request.company_id:
@@ -265,14 +273,19 @@ class PersonalizedSearch:
                 and request.location.lower() not in job.location.lower()
             ):
                 continue
-            semantic_score = max(
-                0.0,
-                min(1.0, sum(a * b for a, b in zip(query_vector, record.embedding))),
-            )
             job_terms = set(_TOKEN_RE.findall(_job_text(job).lower()))
             terms = requested_terms.intersection(job_terms)
-            lexical_score = len(terms) / len(requested_terms) if requested_terms else 0
-            score = semantic_score * 0.7 + lexical_score * 0.3
+            lexical_score = len(terms) / len(requested_terms) if requested_terms else 0.0
+
+            if not has_user_context and not has_query:
+                score = 0.0
+            else:
+                semantic_score = max(
+                    0.0,
+                    min(1.0, sum(a * b for a, b in zip(query_vector, record.embedding))),
+                )
+                score = semantic_score * 0.7 + lexical_score * 0.3 if requested_terms else semantic_score
+
             results.append(
                 SearchResult(
                     job=job,
