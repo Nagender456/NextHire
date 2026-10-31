@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = False
     session_cookie_samesite: str = "lax"
     cors_allowed_origins: str = "http://localhost:5173"
-    cors_origin_regex: str = r"^https://.*\.vercel\.app$"
+    cors_origin_regex: str = r".*"
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         return [
             origin.strip()
             for origin in self.cors_allowed_origins.split(",")
-            if origin.strip()
+            if origin.strip() and origin.strip() != "*"
         ]
 
     @model_validator(mode="after")
@@ -48,10 +48,8 @@ class Settings(BaseSettings):
                 raise ValueError("SESSION_SECRET must be changed in production")
             if not self.session_cookie_secure:
                 raise ValueError("SESSION_COOKIE_SECURE must be true in production")
-            if not self.allowed_origins:
-                raise ValueError("CORS_ALLOWED_ORIGINS must not be empty")
-        if "*" in self.allowed_origins:
-            raise ValueError("CORS_ALLOWED_ORIGINS cannot contain '*'")
+            if "*" in [o.strip() for o in self.cors_allowed_origins.split(",")]:
+                raise ValueError("CORS_ALLOWED_ORIGINS cannot contain '*'")
         if self.session_ttl_seconds < 300:
             raise ValueError("SESSION_TTL_SECONDS must be at least 300")
         if self.repository_backend not in {"memory", "mongo"}:
