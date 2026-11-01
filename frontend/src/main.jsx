@@ -53,6 +53,7 @@ import {
   listApplications,
   createApplication,
   updateApplication,
+  deleteApplication,
   listNotifications,
   markNotificationRead,
   scrapeNaukriJobs,
@@ -1725,6 +1726,210 @@ function JobsPage() {
   );
 }
 
+function AddApplicationModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({
+    job_title: "",
+    company_id: "",
+    status: "applied",
+    application_url: "",
+    notes: "",
+    deadline: "",
+    interview_at: "",
+    next_action: "",
+    next_action_at: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [modalError, setModalError] = useState("");
+
+  const stages = [
+    { key: "saved", label: "Saved" },
+    { key: "applied", label: "Applied" },
+    { key: "assessment", label: "Assessment" },
+    { key: "interview", label: "Interview" },
+    { key: "offer", label: "Offer" },
+    { key: "rejected", label: "Rejected" },
+    { key: "withdrawn", label: "Withdrawn" },
+  ];
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.job_title.trim()) {
+      setModalError("Please enter a job title.");
+      return;
+    }
+    setSubmitting(true);
+    setModalError("");
+
+    try {
+      const payload = {
+        job_title: form.job_title.trim(),
+        company_id: form.company_id.trim() || undefined,
+        status: form.status,
+        application_url: form.application_url.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+        deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
+        interview_at: form.interview_at ? new Date(form.interview_at).toISOString() : null,
+        next_action: form.next_action.trim() || undefined,
+        next_action_at: form.next_action_at ? new Date(form.next_action_at).toISOString() : null,
+      };
+
+      const created = await createApplication(payload);
+      onCreated(created);
+    } catch (err) {
+      setModalError(err.message || "Failed to create application.");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="ai-modal-backdrop" onClick={onClose}>
+      <div className="ai-modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "620px" }}>
+        <div className="ai-modal-header">
+          <div className="ai-modal-title-row">
+            <Briefcase size={18} className="linear-icon-primary" />
+            <div>
+              <h3>Add Application Manually</h3>
+              <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
+                Track an application with all interview dates, notes, and links
+              </span>
+            </div>
+          </div>
+          <button
+            className="ai-modal-close-btn"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="ai-modal-body" style={{ gap: "1.1rem" }}>
+          {modalError && <p className="error-message" role="alert">{modalError}</p>}
+
+          <div className="date-grid">
+            <label>
+              Job Title *
+              <input
+                type="text"
+                required
+                placeholder="e.g. Senior Frontend Developer"
+                value={form.job_title}
+                onChange={(e) => setForm({ ...form, job_title: e.target.value })}
+                autoFocus
+              />
+            </label>
+            <label>
+              Company Name
+              <input
+                type="text"
+                placeholder="e.g. Stripe, Google, Acme"
+                value={form.company_id}
+                onChange={(e) => setForm({ ...form, company_id: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div>
+            <label style={{ marginBottom: "6px", display: "block" }}>Pipeline Stage</label>
+            <div className="stage-selector-pills">
+              {stages.map((st) => (
+                <button
+                  key={st.key}
+                  type="button"
+                  className={`stage-pill-btn ${form.status === st.key ? "active" : ""}`}
+                  onClick={() => setForm({ ...form, status: st.key })}
+                >
+                  {form.status === st.key && <Check size={13} style={{ marginRight: "4px" }} />}
+                  {st.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label>
+            Application / Job URL
+            <input
+              type="url"
+              placeholder="https://jobs.lever.co/..."
+              value={form.application_url}
+              onChange={(e) => setForm({ ...form, application_url: e.target.value })}
+            />
+          </label>
+
+          <label>
+            Notes & Recruiter Discussion
+            <textarea
+              rows={3}
+              placeholder="Add recruiter contact, referral person, salary range, interview rounds..."
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </label>
+
+          <div className="date-grid">
+            <label>
+              Application Deadline
+              <input
+                type="datetime-local"
+                value={form.deadline}
+                onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+              />
+            </label>
+            <label>
+              Interview Date & Time
+              <input
+                type="datetime-local"
+                value={form.interview_at}
+                onChange={(e) => setForm({ ...form, interview_at: e.target.value })}
+              />
+            </label>
+            <label>
+              Next Action Item
+              <input
+                type="text"
+                placeholder="e.g. Follow up on second round"
+                value={form.next_action}
+                onChange={(e) => setForm({ ...form, next_action: e.target.value })}
+              />
+            </label>
+            <label>
+              Next Action Date
+              <input
+                type="datetime-local"
+                value={form.next_action_at}
+                onChange={(e) => setForm({ ...form, next_action_at: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "0.5rem", paddingTop: "0.75rem", borderTop: "1px solid var(--colors-hairline)" }}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={submitting}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {submitting ? "Adding..." : (
+                <>
+                  <Plus size={15} /> Add Application
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function ApplicationsPage() {
   const [applications, setApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -1732,6 +1937,7 @@ function ApplicationsPage() {
   const [saving, setSaving] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedAppId, setSelectedAppId] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const load = () => Promise.all([listApplications(), listNotifications()])
     .then(([nextApplications, nextNotifications]) => {
@@ -1754,6 +1960,18 @@ function ApplicationsPage() {
       .finally(() => setSaving(""));
   };
 
+  const handleDelete = (applicationId) => {
+    if (!window.confirm("Are you sure you want to delete this application?")) return;
+    deleteApplication(applicationId)
+      .then(() => {
+        setApplications((current) => current.filter((item) => item.id !== applicationId));
+        setSelectedAppId(null);
+        setNotice("✓ Application deleted");
+        setTimeout(() => setNotice(""), 2200);
+      })
+      .catch((requestError) => setError(requestError.message));
+  };
+
   const dateValue = (value) => (value ? value.slice(0, 16) : "");
 
   if (error) return <p className="error-message" role="alert">{error}</p>;
@@ -1762,6 +1980,19 @@ function ApplicationsPage() {
 
   return (
     <div className="application-layout">
+      {showAddModal && (
+        <AddApplicationModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={(created) => {
+            setApplications((current) => [created, ...current]);
+            setSelectedAppId(created.id);
+            setShowAddModal(false);
+            setNotice("✓ Application added");
+            setTimeout(() => setNotice(""), 2200);
+          }}
+        />
+      )}
+
       {selectedApp ? (
         <section className="dashboard-panel">
           <div className="application-detail-container">
@@ -1789,28 +2020,83 @@ function ApplicationsPage() {
 
             <article className="application-detail-card">
               <div className="application-detail-title-group">
-                <div>
-                  <span className="eyebrow" style={{ marginBottom: "4px", display: "inline-block" }}>
+                <div style={{ flex: 1 }}>
+                  <span className="eyebrow" style={{ marginBottom: "6px", display: "inline-block" }}>
                     APPLICATION DETAILS
                   </span>
-                  <h2 style={{ margin: "0 0 4px 0", fontSize: "20px", color: "var(--colors-ink)" }}>
-                    {selectedApp.job_title || selectedApp.job_id}
-                  </h2>
-                  <p className="muted" style={{ margin: 0, fontSize: "13px" }}>
-                    {selectedApp.company_id || "Company"}
-                  </p>
+                  <div className="date-grid" style={{ marginBottom: "0.5rem" }}>
+                    <label>
+                      <span className="application-field-label">Job Title</span>
+                      <input
+                        key={`title-${selectedApp.id}`}
+                        type="text"
+                        className="application-title-input"
+                        defaultValue={selectedApp.job_title || selectedApp.job_id}
+                        placeholder="e.g. Senior Frontend Developer"
+                        onBlur={(event) => {
+                          const val = event.target.value.trim();
+                          if (val && val !== (selectedApp.job_title || "")) {
+                            save(selectedApp, { job_title: val });
+                          }
+                        }}
+                      />
+                    </label>
+                    <label>
+                      <span className="application-field-label">Company Name</span>
+                      <input
+                        key={`company-${selectedApp.id}`}
+                        type="text"
+                        className="application-title-input"
+                        defaultValue={selectedApp.company_id || ""}
+                        placeholder="e.g. Stripe, Google, Acme"
+                        onBlur={(event) => {
+                          const val = event.target.value.trim();
+                          if (val !== (selectedApp.company_id || "")) {
+                            save(selectedApp, { company_id: val });
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <label style={{ marginTop: "4px" }}>
+                    <span className="application-field-label">Job / Application URL</span>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <input
+                        key={`url-${selectedApp.id}`}
+                        type="url"
+                        className="application-title-input"
+                        defaultValue={selectedApp.application_url || ""}
+                        placeholder="https://..."
+                        onBlur={(event) => {
+                          const val = event.target.value.trim();
+                          if (val !== (selectedApp.application_url || "")) {
+                            save(selectedApp, { application_url: val || null });
+                          }
+                        }}
+                      />
+                      {selectedApp.application_url && (
+                        <a
+                          className="secondary-button"
+                          href={selectedApp.application_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            fontSize: "12px",
+                            height: "44px",
+                            padding: "0 14px",
+                            whiteSpace: "nowrap",
+                            textDecoration: "none",
+                          }}
+                        >
+                          <ExternalLink size={13} /> Open Link
+                        </a>
+                      )}
+                    </div>
+                  </label>
                 </div>
-                {selectedApp.application_url && (
-                  <a
-                    className="button-link"
-                    href={selectedApp.application_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
-                  >
-                    <ExternalLink size={13} /> Open Application Link
-                  </a>
-                )}
               </div>
 
               {/* Stage Selector */}
@@ -1923,16 +2209,59 @@ function ApplicationsPage() {
                 >
                   <Check size={14} /> Done (Back to applications)
                 </button>
+                <button
+                  type="button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "transparent",
+                    color: "#ef4444",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    padding: "8px 14px",
+                    borderRadius: "var(--rounded-md)",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                  }}
+                  onClick={() => handleDelete(selectedApp.id)}
+                >
+                  <Trash2 size={14} /> Delete Application
+                </button>
               </div>
             </article>
           </div>
         </section>
       ) : (
         <section className="dashboard-panel">
-          <p className="eyebrow">APPLICATION TRACKING</p>
-          <h2>Your applications</h2>
+          <div className="application-page-header">
+            <div>
+              <p className="eyebrow" style={{ margin: "0 0 4px 0" }}>APPLICATION TRACKING</p>
+              <h2 style={{ margin: 0 }}>Your applications</h2>
+            </div>
+            <button
+              type="button"
+              className="primary-button"
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus size={15} /> Add Application
+            </button>
+          </div>
           {applications.length === 0 ? (
-            <p className="empty-state">Save or apply to a role from Jobs to start tracking your applications.</p>
+            <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
+              <p className="empty-state" style={{ marginBottom: "1.25rem" }}>
+                No applications tracked yet. Add one manually or save roles from the job feed.
+              </p>
+              <button
+                type="button"
+                className="primary-button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                onClick={() => setShowAddModal(true)}
+              >
+                <Plus size={15} /> Add Application Manually
+              </button>
+            </div>
           ) : (
             <div className="application-list">
               {applications.map((application) => (

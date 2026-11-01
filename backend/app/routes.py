@@ -1550,6 +1550,17 @@ async def update_application(
     return application
 
 
+@router.delete("/applications/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_application(
+    application_id: str,
+    user: User = Depends(require_user),
+) -> Response:
+    deleted = service.delete_application(application_id, user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail={"code": "APPLICATION_NOT_FOUND"})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/notifications", response_model=list[Notification])
 async def list_notifications(user: User = Depends(require_user)) -> list[Notification]:
     applications = [

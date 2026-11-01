@@ -50,51 +50,71 @@ class FoundationService:
     def create_application(
         self, user_id: str, payload: ApplicationCreate
     ) -> Application:
-        if self.get_job(payload.job_id) is None:
+        job = self.get_job(payload.job_id) if payload.job_id else None
+        if payload.job_id and not job and not (payload.job_title or payload.company_id):
             raise ValueError("JOB_NOT_FOUND")
-        job = self.get_job(payload.job_id)
+
         now = datetime.now(UTC)
-        existing = next(
-            (a for a in self.data.applications if a.user_id == user_id and a.job_id == payload.job_id),
-            None,
-        )
-        if existing:
-            existing.status = payload.status
-            if payload.status != ApplicationStatus.SAVED and not existing.applied_at:
-                existing.applied_at = now
-            if payload.notes:
-                existing.notes = payload.notes
-            if payload.deadline is not None:
-                existing.deadline = payload.deadline
-            if payload.interview_at is not None:
-                existing.interview_at = payload.interview_at
-            if payload.next_action:
-                existing.next_action = payload.next_action
-            if payload.resume_version_id:
-                existing.resume_version_id = payload.resume_version_id
-            existing.updated_at = now
-            from app.auth_store import auth_store
-            auth_store.add_application_activity(user_id, existing.id, f"updated_{payload.status}")
-            return existing
+        if payload.job_id and job:
+            existing = next(
+                (a for a in self.data.applications if a.user_id == user_id and a.job_id == payload.job_id),
+                None,
+            )
+            if existing:
+                existing.status = payload.status
+                if payload.status != ApplicationStatus.SAVED and not existing.applied_at:
+                    existing.applied_at = now
+                if payload.notes:
+                    existing.notes = payload.notes
+                if payload.deadline is not None:
+                    existing.deadline = payload.deadline
+                if payload.interview_at is not None:
+                    existing.interview_at = payload.interview_at
+                if payload.next_action:
+                    existing.next_action = payload.next_action
+                if payload.next_action_at is not None:
+                    existing.next_action_at = payload.next_action_at
+                if payload.resume_version_id:
+                    existing.resume_version_id = payload.resume_version_id
+                if payload.job_title:
+                    existing.job_title = payload.job_title
+                if payload.company_id:
+                    existing.company_id = payload.company_id
+                if payload.application_url:
+                    existing.application_url = payload.application_url
+                existing.updated_at = now
+                self.data.add_application(existing)
+                from app.auth_store import auth_store
+
+                auth_store.add_application_activity(user_id, existing.id, f"updated_{payload.status}")
+                return existing
+
+        from uuid import uuid4
+        app_id = f"application-{uuid4().hex[:8]}"
+        job_id = payload.job_id or f"manual-{uuid4().hex[:8]}"
+        job_title = payload.job_title or (job.title if job else "Custom Role")
+        company_id = payload.company_id or (job.company_id if job else "Company")
+        app_url = payload.application_url or (job.url if job else None)
+
         application = Application(
-            id=f"application-{len(self.data.applications) + 1}",
+            id=app_id,
             user_id=user_id,
-            job_id=payload.job_id,
+            job_id=job_id,
             status=payload.status,
             applied_at=now if payload.status != ApplicationStatus.SAVED else None,
-            company_id=job.company_id if job else None,
-            job_title=job.title if job else "",
+            company_id=company_id,
+            job_title=job_title,
             resume_version_id=payload.resume_version_id,
-            application_url=payload.application_url or (job.url if job else None),
+            application_url=app_url,
             notes=payload.notes,
             deadline=payload.deadline,
             next_action=payload.next_action,
             next_action_at=payload.next_action_at,
             interview_at=payload.interview_at,
             job_snapshot={
-                "title": job.title,
-                "company_id": job.company_id,
-                "url": str(job.url),
+                "title": job_title,
+                "company_id": str(company_id),
+                "url": str(app_url or ""),
             },
             created_at=now,
             updated_at=now,
@@ -124,19 +144,33 @@ class FoundationService:
             for field, value in changes.items():
                 setattr(updated, field, value)
             updated.updated_at = datetime.now(UTC)
+            if (
+                payload.status is not None
+                and payload.status != ApplicationStatus.SAVED
+                and not updated.applied_at
+            ):
+                updated.applied_at = datetime.now(UTC)
+            self.data.add_application(updated)
             from app.auth_store import auth_store
 
             auth_store.add_application_activity(
                 user_id, application_id, "updated", ",".join(changes)
             )
-        if (
-            updated
-            and payload.status is not None
-            and payload.status != ApplicationStatus.SAVED
-            and not updated.applied_at
-        ):
-            updated.applied_at = datetime.now(UTC)
         return updated
+
+    def delete_application(self, application_id: str, user_id: str) -> bool:
+        application = next(
+            (item for item in self.list_applications() if item.id == application_id),
+            None,
+        )
+        if application is None or application.user_id != user_id:
+            return False
+        if hasattr(self.data, "delete_application"):
+            return self.data.delete_application(application_id)
+        self.data.applications[:] = [
+            a for a in self.data.applications if a.id != application_id
+        ]
+        return True
 
     def get_dashboard(
         self, profile: CareerProfile | None = None, user_id: str | None = None

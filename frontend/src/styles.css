@@ -1184,6 +1184,33 @@ button:not([class]):hover {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
+.application-title-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--rounded-md, 8px);
+  border: 1px solid var(--colors-hairline);
+  background: var(--colors-canvas);
+  color: var(--colors-ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.application-title-input:focus {
+  outline: none;
+  border-color: var(--colors-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.application-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .field-hint {
   font-size: 11px;
   color: var(--colors-stone);
@@ -1192,9 +1219,12 @@ button:not([class]):hover {
 
 .application-detail-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   padding-top: 1rem;
   border-top: 1px solid var(--colors-hairline-soft);
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .application-card {

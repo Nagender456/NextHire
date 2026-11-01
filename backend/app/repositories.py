@@ -40,6 +40,10 @@ class InMemoryRepository:
         return next((job for job in self.jobs if job.id == job_id), None)
 
     def add_application(self, application: Application) -> Application:
+        for idx, a in enumerate(self.applications):
+            if a.id == application.id:
+                self.applications[idx] = application
+                return application
         self.applications.append(application)
         return application
 
@@ -59,6 +63,11 @@ class InMemoryRepository:
         if resume_version_id is not None:
             application.resume_version_id = resume_version_id
         return application
+
+    def delete_application(self, application_id: str) -> bool:
+        initial = len(self.applications)
+        self.applications = [item for item in self.applications if item.id != application_id]
+        return len(self.applications) < initial
 
 
 class MongoRepository:
@@ -126,6 +135,10 @@ class MongoRepository:
             {"$set": app_obj.model_dump(mode="json")}
         )
         return app_obj
+
+    def delete_application(self, application_id: str) -> bool:
+        res = self.database.applications.delete_one({"$or": [{"id": application_id}, {"_id": application_id}]})
+        return res.deleted_count > 0
 
 
 def create_repository() -> Repository:

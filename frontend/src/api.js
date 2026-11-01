@@ -385,6 +385,12 @@ export function updateApplication(applicationId, changes) {
   });
 }
 
+export function deleteApplication(applicationId) {
+  return request(`/api/v1/applications/${applicationId}`, {
+    method: "DELETE",
+  });
+}
+
 export function listNotifications() {
   return request("/api/v1/notifications");
 }

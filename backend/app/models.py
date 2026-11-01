@@ -495,7 +495,7 @@ class Application(BaseModel):
     resume_version_id: str | None = None
     company_id: str | None = None
     job_title: str = ""
-    application_url: HttpUrl | None = None
+    application_url: HttpUrl | str | None = None
     notes: str = Field(default="", max_length=5000)
     deadline: datetime | None = None
     next_action: str = Field(default="", max_length=500)
@@ -508,10 +508,12 @@ class Application(BaseModel):
 
 
 class ApplicationCreate(BaseModel):
-    job_id: str
+    job_id: str | None = None
+    job_title: str | None = None
+    company_id: str | None = None
     status: ApplicationStatus = ApplicationStatus.SAVED
     resume_version_id: str | None = None
-    application_url: HttpUrl | None = None
+    application_url: HttpUrl | str | None = None
     notes: str = Field(default="", max_length=5000)
     deadline: datetime | None = None
     next_action: str = Field(default="", max_length=500)
@@ -520,9 +522,11 @@ class ApplicationCreate(BaseModel):
 
 
 class ApplicationUpdate(BaseModel):
+    job_title: str | None = None
+    company_id: str | None = None
     status: ApplicationStatus | None = None
     resume_version_id: str | None = None
-    application_url: HttpUrl | None = None
+    application_url: HttpUrl | str | None = None
     notes: str | None = Field(default=None, max_length=5000)
     deadline: datetime | None = None
     next_action: str | None = Field(default=None, max_length=500)
