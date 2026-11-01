@@ -955,7 +955,246 @@ button:not([class]):hover {
 
 .application-list {
   display: grid;
+  gap: 0.75rem;
+}
+
+/* Simple Title Row Cards */
+.application-summary-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: var(--colors-canvas);
+  border: 1px solid var(--colors-hairline);
+  border-radius: var(--rounded-md, 8px);
+  cursor: pointer;
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.application-summary-card:hover {
+  border-color: var(--colors-primary);
+  background: rgba(99, 102, 241, 0.02);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+.application-summary-card:active {
+  transform: translateY(0);
+}
+
+.application-summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.application-summary-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--colors-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.application-summary-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--colors-slate);
+}
+
+.application-summary-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.application-summary-chevron {
+  color: var(--colors-stone);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.application-summary-card:hover .application-summary-chevron {
+  color: var(--colors-primary);
+  transform: translateX(3px);
+}
+
+/* Status Pills */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  border: 1px solid transparent;
+}
+
+.status-pill-applied {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.status-pill-interview {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+  border-color: rgba(168, 85, 247, 0.25);
+}
+
+.status-pill-offer {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.status-pill-assessment {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.status-pill-saved {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+  border-color: rgba(100, 116, 139, 0.2);
+}
+
+.status-pill-rejected {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.status-pill-withdrawn {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* Inside Detail & Editing View */
+.application-detail-container {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
+}
+
+.application-detail-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.5rem;
+}
+
+.save-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--colors-slate);
+}
+
+.application-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.75rem;
+  background: var(--colors-canvas);
+  border: 1px solid var(--colors-hairline);
+  border-radius: var(--rounded-lg, 12px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.application-detail-title-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--colors-hairline-soft);
+}
+
+.application-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.application-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--colors-ink);
+  letter-spacing: -0.01em;
+}
+
+.stage-selector-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stage-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--colors-surface, #f8fafc);
+  color: var(--colors-slate);
+  border: 1px solid var(--colors-hairline);
+  transition: all 140ms ease;
+}
+
+.stage-pill-btn:hover {
+  border-color: var(--colors-stone);
+  color: var(--colors-ink);
+}
+
+.stage-pill-btn.active {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--colors-primary);
+  border-color: var(--colors-primary);
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.15);
+}
+
+.application-notes-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--rounded-md, 8px);
+  border: 1px solid var(--colors-hairline);
+  background: var(--colors-canvas);
+  color: var(--colors-ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.application-notes-textarea:focus {
+  outline: none;
+  border-color: var(--colors-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--colors-stone);
+  margin-top: -2px;
+}
+
+.application-detail-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  border-top: 1px solid var(--colors-hairline-soft);
 }
 
 .application-card {
@@ -981,7 +1220,13 @@ button:not([class]):hover {
 .date-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .date-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .profile-form {

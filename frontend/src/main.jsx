@@ -104,6 +104,7 @@ import {
   Power,
   Play,
   Upload,
+  ArrowLeft,
   ArrowRight,
 } from "lucide-react";
 import "./styles.css";
@@ -1729,6 +1730,8 @@ function ApplicationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState("");
+  const [notice, setNotice] = useState("");
+  const [selectedAppId, setSelectedAppId] = useState(null);
 
   const load = () => Promise.all([listApplications(), listNotifications()])
     .then(([nextApplications, nextNotifications]) => {
@@ -1742,64 +1745,270 @@ function ApplicationsPage() {
   const save = (application, changes) => {
     setSaving(application.id);
     updateApplication(application.id, changes)
-      .then((updated) => setApplications((current) => current.map((item) => item.id === updated.id ? updated : item)))
+      .then((updated) => {
+        setApplications((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        setNotice("✓ Changes saved");
+        setTimeout(() => setNotice(""), 2200);
+      })
       .catch((requestError) => setError(requestError.message))
       .finally(() => setSaving(""));
   };
 
-  const dateValue = (value) => value ? value.slice(0, 16) : "";
+  const dateValue = (value) => (value ? value.slice(0, 16) : "");
+
   if (error) return <p className="error-message" role="alert">{error}</p>;
+
+  const selectedApp = applications.find((a) => a.id === selectedAppId);
+
   return (
     <div className="application-layout">
-      <section className="dashboard-panel">
-        <p className="eyebrow">APPLICATION TRACKING</p>
-        <h2>Your applications</h2>
-        {applications.length === 0 ? (
-          <p className="empty-state">Save a role from Jobs to start tracking your applications.</p>
-        ) : (
-          <div className="application-list">
-            {applications.map((application) => (
-              <article className="application-card" key={application.id}>
-                <div className="application-card-heading">
-                  <div>
-                    <h3>{application.job_title || application.job_id}</h3>
-                    <p className="muted">{application.company_id || "Company"} · {application.status}</p>
-                  </div>
-                  {application.application_url && <a className="button-link" href={application.application_url} target="_blank" rel="noreferrer">Open application</a>}
+      {selectedApp ? (
+        <section className="dashboard-panel">
+          <div className="application-detail-container">
+            <div className="application-detail-header-bar">
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "13px", padding: "6px 14px" }}
+                onClick={() => setSelectedAppId(null)}
+              >
+                <ArrowLeft size={15} /> Back to all applications
+              </button>
+              {notice ? (
+                <span className="save-status-indicator" style={{ color: "var(--colors-primary)", fontWeight: 600 }}>
+                  {notice}
+                </span>
+              ) : saving === selectedApp.id ? (
+                <span className="save-status-indicator">Saving changes...</span>
+              ) : (
+                <span className="save-status-indicator" style={{ color: "var(--colors-slate)" }}>
+                  <Check size={14} style={{ color: "#10b981" }} /> All changes saved
+                </span>
+              )}
+            </div>
+
+            <article className="application-detail-card">
+              <div className="application-detail-title-group">
+                <div>
+                  <span className="eyebrow" style={{ marginBottom: "4px", display: "inline-block" }}>
+                    APPLICATION DETAILS
+                  </span>
+                  <h2 style={{ margin: "0 0 4px 0", fontSize: "20px", color: "var(--colors-ink)" }}>
+                    {selectedApp.job_title || selectedApp.job_id}
+                  </h2>
+                  <p className="muted" style={{ margin: 0, fontSize: "13px" }}>
+                    {selectedApp.company_id || "Company"}
+                  </p>
                 </div>
-                <label>Status
-                  <select value={application.status} onChange={(event) => save(application, { status: event.target.value })} disabled={saving === application.id}>
-                    {["saved", "applied", "assessment", "interview", "offer", "rejected", "withdrawn"].map((status) => <option key={status}>{status}</option>)}
-                  </select>
-                </label>
-                <label>Notes
-                  <textarea defaultValue={application.notes} onBlur={(event) => event.target.value !== application.notes && save(application, { notes: event.target.value })} />
-                </label>
+                {selectedApp.application_url && (
+                  <a
+                    className="button-link"
+                    href={selectedApp.application_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
+                  >
+                    <ExternalLink size={13} /> Open Application Link
+                  </a>
+                )}
+              </div>
+
+              {/* Stage Selector */}
+              <div className="application-detail-section">
+                <label className="application-field-label">Pipeline Stage</label>
+                <div className="stage-selector-pills">
+                  {[
+                    { key: "saved", label: "Saved" },
+                    { key: "applied", label: "Applied" },
+                    { key: "assessment", label: "Assessment" },
+                    { key: "interview", label: "Interview" },
+                    { key: "offer", label: "Offer" },
+                    { key: "rejected", label: "Rejected" },
+                    { key: "withdrawn", label: "Withdrawn" },
+                  ].map((st) => (
+                    <button
+                      key={st.key}
+                      type="button"
+                      className={`stage-pill-btn ${selectedApp.status === st.key ? "active" : ""}`}
+                      onClick={() => save(selectedApp, { status: st.key })}
+                      disabled={saving === selectedApp.id}
+                    >
+                      {selectedApp.status === st.key && <Check size={13} style={{ marginRight: "4px" }} />}
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="application-detail-section">
+                <label className="application-field-label">Notes & Recruiter Discussion</label>
+                <textarea
+                  key={`notes-${selectedApp.id}`}
+                  defaultValue={selectedApp.notes || ""}
+                  placeholder="Add interview notes, recruiter contacts, salary expectations, discussion takeaways..."
+                  rows={4}
+                  className="application-notes-textarea"
+                  onBlur={(event) => {
+                    if (event.target.value !== (selectedApp.notes || "")) {
+                      save(selectedApp, { notes: event.target.value });
+                    }
+                  }}
+                />
+                <span className="field-hint">Auto-saves when you click away.</span>
+              </div>
+
+              {/* Dates & Actions Grid */}
+              <div className="application-detail-section">
+                <label className="application-field-label">Important Dates & Action Items</label>
                 <div className="date-grid">
-                  <label>Deadline<input type="datetime-local" defaultValue={dateValue(application.deadline)} onBlur={(event) => save(application, { deadline: event.target.value ? new Date(event.target.value).toISOString() : null })} /></label>
-                  <label>Interview date<input type="datetime-local" defaultValue={dateValue(application.interview_at)} onBlur={(event) => save(application, { interview_at: event.target.value ? new Date(event.target.value).toISOString() : null })} /></label>
-                  <label>Next action<input type="text" defaultValue={application.next_action} onBlur={(event) => event.target.value !== application.next_action && save(application, { next_action: event.target.value })} /></label>
-                  <label>Next action date<input type="datetime-local" defaultValue={dateValue(application.next_action_at)} onBlur={(event) => save(application, { next_action_at: event.target.value ? new Date(event.target.value).toISOString() : null })} /></label>
+                  <label>
+                    Deadline
+                    <input
+                      type="datetime-local"
+                      defaultValue={dateValue(selectedApp.deadline)}
+                      onBlur={(event) =>
+                        save(selectedApp, {
+                          deadline: event.target.value ? new Date(event.target.value).toISOString() : null,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Interview Date & Time
+                    <input
+                      type="datetime-local"
+                      defaultValue={dateValue(selectedApp.interview_at)}
+                      onBlur={(event) =>
+                        save(selectedApp, {
+                          interview_at: event.target.value ? new Date(event.target.value).toISOString() : null,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Next Action
+                    <input
+                      type="text"
+                      placeholder="e.g. Follow up with hiring manager"
+                      defaultValue={selectedApp.next_action || ""}
+                      onBlur={(event) => {
+                        if (event.target.value !== (selectedApp.next_action || "")) {
+                          save(selectedApp, { next_action: event.target.value });
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Next Action Date
+                    <input
+                      type="datetime-local"
+                      defaultValue={dateValue(selectedApp.next_action_at)}
+                      onBlur={(event) =>
+                        save(selectedApp, {
+                          next_action_at: event.target.value ? new Date(event.target.value).toISOString() : null,
+                        })
+                      }
+                    />
+                  </label>
                 </div>
-              </article>
-            ))}
+              </div>
+
+              <div className="application-detail-footer">
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                  onClick={() => setSelectedAppId(null)}
+                >
+                  <Check size={14} /> Done (Back to applications)
+                </button>
+              </div>
+            </article>
           </div>
-        )}
-      </section>
-      <section className="dashboard-panel">
-        <p className="eyebrow">REMINDERS</p>
-        <h2>Upcoming actions</h2>
-        {notifications.length === 0 ? <p className="empty-state">No reminders yet.</p> : (
-          <ul className="entity-list">
-            {notifications.map((notification) => (
-              <li key={notification.id}>
-                <span><strong>{notification.title}</strong><br />{notification.message}<br /><span className="muted">{new Date(notification.due_at).toLocaleString()}</span></span>
-                {notification.read_at ? <span className="muted">Read</span> : <button className="button-link" onClick={() => markNotificationRead(notification.id).then((updated) => setNotifications((current) => current.map((item) => item.id === updated.id ? updated : item)))}>Mark read</button>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        </section>
+      ) : (
+        <section className="dashboard-panel">
+          <p className="eyebrow">APPLICATION TRACKING</p>
+          <h2>Your applications</h2>
+          {applications.length === 0 ? (
+            <p className="empty-state">Save or apply to a role from Jobs to start tracking your applications.</p>
+          ) : (
+            <div className="application-list">
+              {applications.map((application) => (
+                <div
+                  className="application-summary-card"
+                  key={application.id}
+                  onClick={() => setSelectedAppId(application.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedAppId(application.id);
+                    }
+                  }}
+                >
+                  <div className="application-summary-content">
+                    <h3 className="application-summary-title">
+                      {application.job_title || application.job_id}
+                    </h3>
+                    <p className="application-summary-subtitle">
+                      {application.company_id || "Company"}
+                    </p>
+                  </div>
+                  <div className="application-summary-meta">
+                    <span className={`status-pill status-pill-${application.status || "applied"}`}>
+                      {application.status || "applied"}
+                    </span>
+                    <ChevronRight size={18} className="application-summary-chevron" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!selectedApp && (
+        <section className="dashboard-panel">
+          <p className="eyebrow">REMINDERS</p>
+          <h2>Upcoming actions</h2>
+          {notifications.length === 0 ? (
+            <p className="empty-state">No reminders yet.</p>
+          ) : (
+            <ul className="entity-list">
+              {notifications.map((notification) => (
+                <li key={notification.id}>
+                  <span>
+                    <strong>{notification.title}</strong>
+                    <br />
+                    {notification.message}
+                    <br />
+                    <span className="muted">{new Date(notification.due_at).toLocaleString()}</span>
+                  </span>
+                  {notification.read_at ? (
+                    <span className="muted">Read</span>
+                  ) : (
+                    <button
+                      className="button-link"
+                      onClick={() =>
+                        markNotificationRead(notification.id).then((updated) =>
+                          setNotifications((current) =>
+                            current.map((item) => (item.id === updated.id ? updated : item))
+                          )
+                        )
+                      }
+                    >
+                      Mark read
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }
