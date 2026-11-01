@@ -27,11 +27,11 @@ class ScraperScheduler:
         """Execute a crawl of all active, verified companies."""
         started_at = datetime.now(UTC)
         self.last_run_at = started_at
-        logger.info("Starting scheduled career page scraping (every 12h)...")
+        logger.info("Starting scheduled Naukri job scraping for companies (every 12h)...")
 
         target_companies = [
             c for c in ingestion_store.companies.values()
-            if c.active and c.career_page_url
+            if c.active
         ]
 
         results = []

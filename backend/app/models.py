@@ -293,11 +293,11 @@ class PasswordResetConfirm(BaseModel):
 class Company(BaseModel):
     id: str
     name: str
-    website: HttpUrl | None = None
-    career_page_url: HttpUrl | None = None
+    website: HttpUrl | str | None = None
+    career_page_url: HttpUrl | str | None = None
     active: bool = True
-    verification_status: str = "pending"
-    source_adapter: str = "generic"
+    verification_status: str = "verified"
+    source_adapter: str = "naukri"
     career_url_verified_at: datetime | None = None
     last_synced_at: datetime | None = None
     last_sync_status: str | None = None
@@ -310,7 +310,7 @@ class Job(BaseModel):
     company_id: str
     title: str
     location: str
-    url: HttpUrl
+    url: HttpUrl | str
     summary: str = ""
     description: str = ""
     responsibilities: list[str] = Field(default_factory=list)
@@ -318,7 +318,7 @@ class Job(BaseModel):
     preferred_skills: list[str] = Field(default_factory=list)
     employment_type: str | None = None
     experience: str | None = None
-    source_url: HttpUrl | None = None
+    source_url: HttpUrl | str | None = None
     external_job_id: str | None = None
     posted_at: datetime | None = None
     last_seen_at: datetime | None = None
@@ -452,14 +452,14 @@ class RecommendationFeedbackRecord(BaseModel):
 
 class CompanyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
-    website: HttpUrl | None = None
-    career_page_url: HttpUrl
+    website: HttpUrl | str | None = None
+    career_page_url: HttpUrl | str | None = None
 
 
 class CompanyUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
-    website: HttpUrl | None = None
-    career_page_url: HttpUrl | None = None
+    website: HttpUrl | str | None = None
+    career_page_url: HttpUrl | str | None = None
     active: bool | None = None
     verification_status: str | None = None
 

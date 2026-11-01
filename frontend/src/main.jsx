@@ -4937,10 +4937,10 @@ function AdminPage() {
       <section className="linear-widget-panel">
         <div className="widget-header">
           <h2 className="widget-title">Add Company & Career Page</h2>
-          <span className="widget-tag">Target Source</span>
+          <span className="widget-tag">Naukri Integration</span>
         </div>
         <p style={{ color: "var(--colors-slate)", fontSize: "13.5px", marginBottom: "1rem" }}>
-          Add a company name and its careers/jobs URL. The automated crawler will fetch and index open jobs every 12 hours.
+          Add any target company. NextHire searches live openings on Naukri via JobSpy and indexes 10–12 verified roles for this company automatically.
         </p>
 
         <form onSubmit={submitCompany} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px", alignItems: "flex-end" }}>
@@ -4951,7 +4951,7 @@ function AdminPage() {
             <input
               required
               type="text"
-              placeholder="e.g. OpenAI, Stripe, Vercel"
+              placeholder="e.g. Infosys, TCS, Google, Spotify"
               value={companyForm.name}
               onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
             />
@@ -4959,26 +4959,13 @@ function AdminPage() {
 
           <label style={{ margin: 0 }}>
             <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
-              Career Page URL *
-            </span>
-            <input
-              required
-              type="url"
-              placeholder="https://careers.company.com/jobs"
-              value={companyForm.career_page_url}
-              onChange={(e) => setCompanyForm({ ...companyForm, career_page_url: e.target.value })}
-            />
-          </label>
-
-          <label style={{ margin: 0 }}>
-            <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
-              Official Website (optional)
+              Career Page / Website (optional)
             </span>
             <input
               type="url"
               placeholder="https://company.com"
-              value={companyForm.website}
-              onChange={(e) => setCompanyForm({ ...companyForm, website: e.target.value })}
+              value={companyForm.career_page_url}
+              onChange={(e) => setCompanyForm({ ...companyForm, career_page_url: e.target.value, website: e.target.value })}
             />
           </label>
 
@@ -4989,7 +4976,7 @@ function AdminPage() {
             style={{ height: "40px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
           >
             <Plus size={15} />
-            <span>{addingCompany ? "Adding & Scraping..." : "Add Company"}</span>
+            <span>{addingCompany ? "Adding & Scraping Naukri..." : "Add Company"}</span>
           </button>
         </form>
       </section>
@@ -5158,7 +5145,7 @@ function AdminPage() {
                       style={{ fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
                     >
                       <RefreshCw size={12} className={isScraping ? "spin" : ""} />
-                      <span>{isScraping ? "Scraping..." : "Scrape Now"}</span>
+                      <span>{isScraping ? "Scraping Naukri..." : "Scrape Naukri"}</span>
                     </button>
 
                     <button

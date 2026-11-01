@@ -1260,7 +1260,7 @@ async def refresh_company(
 ) -> CrawlResult:
     if company_id not in ingestion_store.companies:
         raise HTTPException(status_code=404, detail={"code": "COMPANY_NOT_FOUND"})
-    result = ingestion_store.refresh(company_id)
+    result = await asyncio.to_thread(ingestion_store.refresh, company_id)
     admin_store.activity("job_ingestion")
     admin_store.audit(
         admin.id,
@@ -1357,11 +1357,18 @@ async def refresh_companies(
     admin: User = Depends(require_admin),
 ) -> list[CrawlResult]:
     del payload
-    results = [
-        ingestion_store.refresh(company.id)
+    target_ids = [
+        company.id
         for company in ingestion_store.companies.values()
         if company.active and company.verification_status == "verified"
     ]
+    results = []
+    for cid in target_ids:
+        try:
+            res = await asyncio.to_thread(ingestion_store.refresh, cid)
+            results.append(res)
+        except Exception as exc:
+            logger.warning("Error refreshing company %s: %s", cid, exc)
     admin_store.activity("job_ingestion")
     admin_store.audit(admin.id, "all_companies_refreshed", "ingestion")
     return results
