@@ -192,8 +192,14 @@ NextHire incorporates an **Anti-Hallucination Provenance Guard**: every bullet p
 
 #### Step-by-Step Testing Procedure:
 1. Navigate to `/applications`.
-2. Click **New Application** (or create one directly from a job card).
-3. Select the target job and link the specific tailored resume version (`v1`, `v2`, etc.) used for submission.
+2. Inspect the **Simplified Applications Workspace**:
+   - By default, applications display in clean, high-density cards highlighting job title, company name, and current status.
+   - Click anywhere on an application card to open the drill-down detail modal with full history, notes, compensation, and status updates.
+3. **Manual Application Creation:**
+   - Click **Add Application Manually** at the top of the applications view.
+   - Fill in all application metadata: Custom Company Name, Job Title, Job URL, Job Description, Salary Range, Location, Notes, Deadlines, and Initial Status.
+   - Click **Create Application**.
+   - **Expected Result:** The new application immediately appears in the list and persists across reloads.
 4. Manage stages across the pipeline:
    - `Saved` $\rightarrow$ `Applied` $\rightarrow$ `Interviewing` $\rightarrow$ `Offer` $\rightarrow$ `Rejected`.
 5. Update application metadata:
@@ -201,6 +207,8 @@ NextHire incorporates an **Anti-Hallucination Provenance Guard**: every bullet p
    - **Expected Result:** Stage transitions and notes persist across page reloads.
 6. Verify notification badges:
    - When an interview or assessment deadline is scheduled, check the notification bell in the top navigation bar for automated alerts.
+7. Application Deletion:
+   - In the application modal, click **Delete Application** to remove it cleanly.
 
 ---
 
@@ -217,7 +225,7 @@ NextHire incorporates an **Anti-Hallucination Provenance Guard**: every bullet p
 
 ---
 
-### Workflow 8: Admin Console, Scraping & Crawler Controls
+### Workflow 8: Admin Console, Scraping & Candidate Whitelist Queue
 
 - **Access Requirement:** Must be logged in as an administrator.
 - **Login:** `admin@nexthire.dev` / `Admin12345!`
@@ -225,16 +233,23 @@ NextHire incorporates an **Anti-Hallucination Provenance Guard**: every bullet p
 
 #### Step-by-Step Testing Procedure:
 1. Log in with admin credentials and open `/admin`.
-2. **Company Crawler Management:**
-   - Inspect the list of configured companies (Stripe, Datadog, Figma, Notion, etc.).
-   - Edit a company's career URL, toggle active/inactive status, or click **Crawl Now**.
-3. **Prototype Reset:**
-   - Click **Reset Prototype Companies**.
-   - **Expected Result:** Re-seeds the system with the top curated prototype companies.
-4. **Live Job Ingestion:**
-   - Use the Admin Scraper tool to query and ingest jobs directly into the global database.
-5. **System Audit Logs & Crawler Status:**
-   - Check scheduler status, crawl frequency, and error logs.
+2. **Candidate Target Company Whitelist Queue:**
+   - When a candidate adds a new unmonitored target company in `/profile` (e.g., "Swiggy", "Zomato", "Stripe"), it automatically enters the admin review queue.
+   - In the overview cards, observe the amber pill: `{N} pending whitelist`.
+   - In the **Candidate Whitelist Queue** panel, review pending requests with candidate badges.
+   - Click **Approve & Scrape Naukri**:
+     - **Expected Result:** NextHire marks the company as verified and immediately triggers the `JobSpy` background worker to scrape 10–12 verified live roles from Naukri, indexing them into the database.
+   - Alternatively, click **Reject** to dismiss and delete the request.
+3. **Target Company Whitelist Filtering:**
+   - In the Target Companies table, toggle between **All Companies**, **Whitelisted**, and **Pending Whitelist** filters.
+4. **Naukri Live Job Ingestion via JobSpy:**
+   - In the **JobSpy · Naukri Live Job Ingestion** section, enter a keyword (e.g. `Software Engineer`), location (e.g. `Bengaluru, India`), and limit (e.g. `20`).
+   - Click **Scrape from Naukri**.
+   - **Expected Result:** Live postings with skills, salary, and direct application links are ingested directly into the global database.
+5. **Company Crawler Management & Prototype Reset:**
+   - Inspect configured companies, toggle active/paused, or click **Reset to Top 12**.
+6. **System Audit Logs & Crawler Status:**
+   - Check scheduler status (12-hour automated scraping), crawl frequency, and error logs.
 
 ---
 
@@ -259,14 +274,17 @@ NextHire incorporates an **Anti-Hallucination Provenance Guard**: every bullet p
 Run these automated commands directly in the terminal to verify system integrity:
 
 ```powershell
-# 1. Run all Backend Unit & Integration Tests (55 tests)
+# 1. Run all Backend Unit & Integration Tests (57 tests)
 cd d:\Programs\NextHire(Copilot)\backend
 python -m pytest -q
 
-# 2. Run the 10-Step Resume Tailoring Integration Suite
-python C:\Users\nagen\.gemini\antigravity-ide\brain\c1122133-d24d-46c7-8118-eb69ebc74128\scratch\test_resume_tailoring.py
+# 2. Run the Whitelist & Scraping Workflow Tests
+python -m pytest tests/test_whitelist.py -q
 
-# 3. Run all Frontend Unit Tests (7 tests)
+# 3. Run all Frontend Unit Tests (9 tests)
 cd d:\Programs\NextHire(Copilot)\frontend
 npm test -- --run
+
+# 4. Validate Production Build
+npm run build
 ```

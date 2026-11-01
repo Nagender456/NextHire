@@ -98,22 +98,29 @@ frontend shell, navigation, API service layer, foundation entities, dashboard
 summary, and explicit loading/error/empty states. Stage 2 provides email
 authentication, secure sessions, password reset, profile preferences, and a
 Google OAuth integration that activates when credentials are configured.
-Stage 6 now provides a replaceable local embedding/index boundary, tenant-safe
+Stage 3 provides Career Knowledge Base management, PDF/DOCX resume upload,
+and Google Gemini 2.5 Flash / Flash-lite AI extraction with automatic skill
+deduplication and local NLP fallback.
+Stage 5 provides verified company records, JobSpy live scraping on Naukri
+(10–12 verified roles per company), candidate target company submission
+interception, and an administrative whitelist review and approval queue.
+Stage 6 provides a replaceable local embedding/index boundary, tenant-safe
 personalized job retrieval, metadata filters, re-indexing, and deletion
 propagation. A hosted embedding provider and durable vector store can be
 configured behind the same interfaces without changing the API contract.
 Stage 7 adds explainable job intelligence: normalized required/preferred skill
 matching, fit percentages, explicit skill gaps, relevant projects, grounded
 learning opportunities, and user recommendation feedback.
-Stage 8 now provides a fact-grounded structured resume boundary: job-specific
+Stage 8 provides a fact-grounded structured resume boundary: job-specific
 draft generation from confirmed career entities, versioning, validated edits,
 approval, deterministic LaTeX export, and approved resume linking to
 applications.
-Stage 9 now provides application details and lifecycle tracking, including
-assessment/interview/withdrawn statuses, job snapshots, notes, deadlines,
-next actions, interview dates, resume linkage, and idempotent in-app reminders.
-Stage 10 now provides an admin-gated operational overview for users, companies,
-jobs, and crawl health, plus user-scoped application and recurring skill-gap
-analytics. It also includes company management, job/ingestion monitoring,
-AI/workflow activity summaries, audit logs, privacy controls, retention
-purges, and user data exports.
+Stage 9 provides application details and lifecycle tracking, simplified
+high-density title cards with drill-down editing, manual application creation
+with all metadata fields, job snapshots, notes, deadlines, next actions,
+interview dates, resume linkage, and idempotent in-app reminders.
+Stage 10 provides an admin-gated operational overview for users, companies,
+pending whitelist approvals, jobs, and crawl health, plus user-scoped application
+and recurring skill-gap analytics. It also includes the Candidate Whitelist Queue,
+whitelist filtering, on-demand JobSpy live scraping, AI/workflow activity
+summaries, audit logs, privacy controls, retention purges, and user data exports.

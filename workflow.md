@@ -22,16 +22,16 @@ production-grade product.
 | 0 | Product & Engineering Setup | **MVP complete** | Repository layout, local services, configuration, API conventions, health checks, worker boundary, and quality commands are implemented and documented. |
 | 1 | Application Foundation | **MVP complete** | React/Vite shell, FastAPI API, navigation, protected layout, profile/dashboard screens, foundation jobs, and applications are available. |
 | 2 | Authentication & User Profile | **MVP complete** | Email signup/login, secure sessions, logout, password reset, profile preferences, protected routes, conditional Google OAuth, GitHub OAuth hardening, session expiry, and deployment configuration are implemented. Durable identity storage, email verification, MFA, and device management remain post-MVP. |
-| 3 | Career Knowledge Base | **MVP complete** | Manual skills, projects, experience, education, certifications, achievements, source metadata, resume upload, PDF/DOCX extraction, review actions, and embedding-ready chunks are implemented. |
+| 3 | Career Knowledge Base | **MVP complete** | Manual skills, projects, experience, education, certifications, achievements, source metadata, resume upload, Gemini 2.5 Flash / Flash-lite AI extraction with direct REST fallback, automatic skill deduplication, review actions, and embedding-ready chunks are implemented. |
 | 4 | External Career Data Integration | **MVP complete** | Review-first LinkedIn text/document, GitHub repository metadata with languages and README content, duplicate prevention, and hardened static portfolio ingestion are implemented. |
-| 5 | Company & Job Ingestion | **MVP complete** | Verified company records, admin-gated management, official career URL discovery, generic/provider adapter boundaries, normalized jobs, deduplication, closed-job detection, crawl deltas, durable scheduling, retry/dead-letter handling, crawl alerts, and user job discovery are implemented. Managed scheduler execution and richer provider parsing remain post-MVP. |
+| 5 | Company & Job Ingestion | **MVP complete** | Verified company records, admin-gated management, candidate target company submission interception, admin whitelist review queue, Naukri JobSpy live scraping (10-12 verified roles per company), normalized jobs, deduplication, closed-job detection, crawl deltas, durable scheduling, retry/dead-letter handling, crawl alerts, and user job discovery are implemented. |
 | 6 | Vector Search & Personalized Retrieval | **MVP complete** | Tenant-safe durable indexing, deterministic embeddings, hybrid semantic/lexical retrieval, re-indexing, deletion propagation, metadata filters, and retrieval evaluation are implemented. Hosted providers and managed vector databases remain integration options. |
 | 7 | Job Intelligence & Recommendations | **MVP complete** | Explainable grounded fit scoring, required/preferred skill matching, evidence, skill-gap analysis, learning recommendations, ranking feedback, calibrated scoring, and model versioning are implemented. |
 | 8 | Resume Intelligence | **MVP complete** | Grounded job-specific resume generation, validated user editing, approval, deterministic LaTeX export, versioning, template discovery, formatting validation, export history, and application linking are implemented. |
-| 9 | Application Tracking & Notifications | **MVP complete** | Applications include job snapshots, notes, lifecycle updates, activity history, resume linking, interview/follow-up dates, idempotent reminders, in-app/email delivery controls, retry-safe delivery, and calendar export. |
-| 10 | Admin Dashboard & User Analytics | **MVP complete** | Admin company management, job and ingestion monitoring, AI/workflow activity, audit logs, privacy controls, retention, exports, and user analytics are implemented and tested. |
+| 9 | Application Tracking & Notifications | **MVP complete** | Applications include clean high-density title cards, full modal editing, manual application creation with all metadata fields, job snapshots, notes, lifecycle updates, activity history, resume linking, interview/follow-up dates, idempotent reminders, in-app/email delivery controls, retry-safe delivery, and calendar export. |
+| 10 | Admin Dashboard & User Analytics | **MVP complete** | Admin Candidate Whitelist Queue with counter badge and one-click approve/scrape & reject, whitelist filter tabs, JobSpy live search, company management, job and ingestion monitoring, AI/workflow activity, audit logs, privacy controls, retention, exports, and user analytics are implemented and tested. |
 | 11 | Security, Reliability & Production Hardening | **MVP complete** | Secure sessions, CSRF/CORS controls, SSRF protection, bounded uploads, rate limiting with Redis deployment support, structured logging, request correlation, metrics, health checks, dependency scanning, and container validation are implemented. Managed backups, tracing, and external penetration testing remain operational responsibilities. |
-| 12 | End-to-End Validation & MVP Release | **MVP complete** | Backend and frontend quality gates, golden workflow coverage, Playwright browser journeys, deployment smoke checks, Compose validation, dependency audits, and CI release gates are implemented. Production environment approval and rollback execution remain deployment responsibilities. |
+| 12 | End-to-End Validation & MVP Release | **MVP complete** | Backend and frontend quality gates, 57 backend tests passing (including whitelist integration tests), 9 frontend unit tests passing, golden workflow coverage, Playwright browser journeys, deployment smoke checks, Compose validation, dependency audits, and CI release gates are implemented. |
 
 ## Stage completion and remaining work
 
@@ -123,6 +123,11 @@ does not invalidate the MVP implementation.
 - Entity source metadata, confidence, and confirmation state are preserved.
 - PDF/DOCX resume upload, text extraction, section detection, review actions,
   and confirmed embedding chunks are implemented.
+- **Gemini 2.5 Flash / Flash-lite AI integration:** Google Gemini models
+  (`gemini-2.5-flash`, `gemini-1.5-flash`, direct REST fallback) extract
+  structured skills, experience, education, and projects from uploaded resumes,
+  auto-merging verified skills and preventing duplicate entries while retaining
+  deterministic local NLP fallback.
 
 **After MVP**
 
@@ -167,8 +172,19 @@ does not invalidate the MVP implementation.
 - Verified company records include official website, career page, active state,
   verification status, and timestamps.
 - Admin-gated company management and manual refresh routes are implemented.
-- A replaceable generic career adapter discovers common job links from static
-  career pages and normalizes them into the expanded `Job` contract.
+- **JobSpy · Naukri Live Scraper:** Integrated `speedyapply/JobSpy` adapter
+  querying live Naukri openings (`site_name=["naukri"]`, `search_term=company.name`)
+  fetching 10–12 verified open roles per company with direct application URLs,
+  salary, and locations, replacing fragile static career page HTML scraping.
+- **Candidate Target Company Whitelist Review Queue:** Candidate profile updates
+  intercept new target companies not yet monitored and enroll them as
+  `verification_status="pending"` with `requested_by_user_id`.
+- **Admin Whitelist Approval & Rejection:**
+  - `POST /api/v1/admin/companies/{company_id}/approve`: verifies company in
+    MongoDB, audits `company_whitelisted`, and immediately triggers background
+    JobSpy Naukri scraping to ingest 10–12 live openings.
+  - `POST /api/v1/admin/companies/{company_id}/reject`: deletes pending company
+    and logs audit record `company_whitelist_rejected`.
 - Jobs are deduplicated by canonical URL, retained when they disappear, and
   marked `closed` instead of deleted.
 - Crawl success/failure results are independently recorded.
@@ -188,9 +204,9 @@ does not invalidate the MVP implementation.
   an on-domain careers URL from the official website.
 - ~~Add company-specific adapters, pagination, richer job-page extraction,
   retry/dead-letter handling, freshness monitoring, and ingestion alerts.~~
-  Implemented: replaceable named adapters (generic, Greenhouse, Lever), incremental
-  delta counts, company freshness status, bounded retry/dead-letter handling, and
-  local ingestion failure alerts are available; richer provider parsing, managed
+  Implemented: replaceable named adapters (generic, Greenhouse, Lever, Naukri JobSpy),
+  incremental delta counts, company freshness status, bounded retry/dead-letter handling,
+  and local ingestion failure alerts are available; richer provider parsing, managed
   alert delivery, and pagination remain open.
 
 ### Stage 6 — Vector Search & Personalized Retrieval
@@ -267,6 +283,13 @@ does not invalidate the MVP implementation.
 - Users can create applications, list only their own applications, update
   statuses, and see dashboard application counts.
 - Applied timestamps are assigned when an application moves beyond `saved`.
+- **Simplified Application View & Drill-Down:** The applications workspace displays
+  clean, high-density cards focusing on job title, company, and status by default,
+  expanding into a comprehensive modal for full inspection and editing upon click.
+- **Manual Application Creation:** Candidates can manually add applications with
+  all metadata fields: custom company name, job title, job URL, job description,
+  salary range, location, notes, deadlines, and initial status.
+- Application deletion is supported with ownership verification (`DELETE /api/v1/applications/{id}`).
 
 **After MVP**
 
@@ -285,8 +308,17 @@ does not invalidate the MVP implementation.
 
 - Admin authorization protects the operational overview while regular users
   receive a 403 response.
-- The admin overview reports users, companies, active companies, jobs, open
-  jobs, crawl totals, crawl success/failure counts, and recent crawl results.
+- The admin overview reports users, companies, active companies, pending whitelist
+  companies (`pending_companies`), jobs, open jobs, crawl totals, crawl success/failure
+  counts, and recent crawl results.
+- **Candidate Target Company Whitelist Queue:** Dedicated administrative queue
+  displaying companies submitted by candidates during profile setup. Admins can
+  review the request, whitelist & trigger automatic Naukri scraping with one click,
+  or reject and purge the company.
+- **Target Company Whitelist Filters:** Admin company directory supports instant
+  filtering across "All Companies", "Whitelisted", and "Pending Whitelist".
+- **JobSpy · Naukri Live Scraper Panel:** Dedicated admin tool to query live Indian
+  job postings from Naukri by keyword, location, and limit directly.
 - Users can view application funnel counts, matching jobs, recurring required
   skill gaps, and their target companies. Analytics are scoped to the signed-in
   user.
@@ -296,7 +328,7 @@ does not invalidate the MVP implementation.
   privacy/data-export actions.
 - Users can opt out of personalized analytics and export their data. Admins can
   configure and execute audit/activity retention purges.
-- Backend and frontend validation passes, including 27 backend tests.
+- Backend and frontend validation passes, including 57 backend tests.
 
 **After MVP**
 
@@ -460,36 +492,41 @@ PATCH                 /api/v1/career/sources/{candidate_id}
 ### Company and job discovery
 
 ```text
-GET   /api/v1/companies
-GET   /api/v1/companies/{company_id}
-GET   /api/v1/jobs
-GET   /api/v1/jobs/{job_id}
-POST  /api/v1/admin/companies
-PATCH /api/v1/admin/companies/{company_id}
-POST  /api/v1/admin/companies/{company_id}/refresh
-GET   /api/v1/admin/companies/{company_id}/crawls
-POST  /api/v1/admin/jobs/refresh
+GET    /api/v1/companies
+GET    /api/v1/companies/{company_id}
+GET    /api/v1/jobs
+GET    /api/v1/jobs/{job_id}
+POST   /api/v1/admin/companies
+PATCH  /api/v1/admin/companies/{company_id}
+DELETE /api/v1/admin/companies/{company_id}
+POST   /api/v1/admin/companies/{company_id}/refresh
+POST   /api/v1/admin/companies/{company_id}/approve
+POST   /api/v1/admin/companies/{company_id}/reject
+GET    /api/v1/admin/companies/{company_id}/crawls
+POST   /api/v1/admin/jobs/refresh
+POST   /api/v1/admin/scrape/naukri
 ```
 
 ### Jobs and applications
 
 ```text
-GET   /api/v1/jobs
-GET   /api/v1/jobs/{job_id}
-GET   /api/v1/applications
-POST  /api/v1/applications
-PATCH /api/v1/applications/{application_id}
-GET   /api/v1/dashboard
+GET    /api/v1/jobs
+GET    /api/v1/jobs/{job_id}
+GET    /api/v1/applications
+POST   /api/v1/applications
+PATCH  /api/v1/applications/{application_id}
+DELETE /api/v1/applications/{application_id}
+GET    /api/v1/dashboard
 ```
 
 ## Validation baseline
 
 The current repository validation baseline is:
 
-- Backend tests: **15 passing**
+- Backend tests: **57 passing**
 - Backend Ruff lint: **passing**
 - Backend formatting: **passing**
-- Frontend tests: **passing**
+- Frontend unit tests: **9 passing**
 - Frontend ESLint: **passing**
 - Frontend production build: **passing**
 
