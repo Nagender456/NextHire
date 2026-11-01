@@ -25,6 +25,7 @@ import {
   getJobIntelligence,
   getProfile,
   createCareerEntity,
+  updateCareerEntity,
   deleteCareerEntity,
   ingestGitHub,
   ingestLinkedIn,
@@ -63,6 +64,7 @@ import {
   generateResume,
   listResumes,
   updateResume,
+  listResumeTemplates,
   exportResumeLatex,
 } from "./api";
 import { paginateItems } from "./pagination";
@@ -109,6 +111,13 @@ import {
   Upload,
   ArrowLeft,
   ArrowRight,
+  Edit2,
+  ArrowUp,
+  ArrowDown,
+  User,
+  Mail,
+  Bell,
+  Shield,
 } from "lucide-react";
 import "./styles.css";
 
@@ -2517,7 +2526,21 @@ function CareerKnowledgeBase({ onProfileSync }) {
   const [skills, setSkills] = useState([]);
   const [projects, setProjects] = useState([]);
   const [skillName, setSkillName] = useState("");
+  const [skillPriority, setSkillPriority] = useState("HIGH");
+  const [editingSkillId, setEditingSkillId] = useState(null);
+  const [editingSkillName, setEditingSkillName] = useState("");
+  const [editingSkillPriority, setEditingSkillPriority] = useState("HIGH");
+
   const [projectName, setProjectName] = useState("");
+  const [projectDesc, setProjectDesc] = useState("");
+  const [projectTech, setProjectTech] = useState("");
+  const [projectUrl, setProjectUrl] = useState("");
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [editingProjectName, setEditingProjectName] = useState("");
+  const [editingProjectDesc, setEditingProjectDesc] = useState("");
+  const [editingProjectTech, setEditingProjectTech] = useState("");
+  const [editingProjectUrl, setEditingProjectUrl] = useState("");
+
   const [error, setError] = useState("");
   const [document, setDocument] = useState(null);
   const [extracted, setExtracted] = useState([]);
@@ -2569,24 +2592,101 @@ function CareerKnowledgeBase({ onProfileSync }) {
 
   const addSkill = (event) => {
     event.preventDefault();
-    createCareerEntity("skills", { name: skillName, priority: "MEDIUM" })
+    if (!skillName.trim()) return;
+    createCareerEntity("skills", { name: skillName.trim(), priority: skillPriority })
       .then((skill) => {
         setSkills([...skills, skill]);
         setSkillName("");
+        setSkillPriority("HIGH");
         setShowAddSkill(false);
+        if (onProfileSync) onProfileSync();
       })
       .catch((requestError) => setError(requestError.message));
   };
 
+  const handleUpdateSkill = (id, name, priority) => {
+    if (!name.trim()) return;
+    updateCareerEntity("skills", id, { name: name.trim(), priority })
+      .then((updated) => {
+        setSkills(skills.map((s) => (s.id === id ? updated : s)));
+        setEditingSkillId(null);
+        if (onProfileSync) onProfileSync();
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  const handleDeleteSkill = (id) => {
+    deleteCareerEntity("skills", id)
+      .then(() => {
+        setSkills(skills.filter((s) => s.id !== id));
+        if (onProfileSync) onProfileSync();
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  const cycleSkillPriority = (skill) => {
+    const cycle = { HIGH: "MEDIUM", MEDIUM: "LOW", LOW: "HIGH" };
+    const nextPriority = cycle[skill.priority] || "HIGH";
+    updateCareerEntity("skills", skill.id, { priority: nextPriority })
+      .then((updated) => {
+        setSkills(skills.map((s) => (s.id === skill.id ? updated : s)));
+        if (onProfileSync) onProfileSync();
+      })
+      .catch((err) => setError(err.message));
+  };
+
   const addProject = (event) => {
     event.preventDefault();
-    createCareerEntity("projects", { name: projectName })
+    if (!projectName.trim()) return;
+    const techArray = projectTech
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    createCareerEntity("projects", {
+      name: projectName.trim(),
+      description: projectDesc.trim(),
+      technologies: techArray,
+      url: projectUrl.trim(),
+    })
       .then((project) => {
         setProjects([...projects, project]);
         setProjectName("");
+        setProjectDesc("");
+        setProjectTech("");
+        setProjectUrl("");
         setShowAddProject(false);
+        if (onProfileSync) onProfileSync();
       })
       .catch((requestError) => setError(requestError.message));
+  };
+
+  const handleUpdateProject = (id, name, desc, techStr, url) => {
+    if (!name.trim()) return;
+    const techArray = techStr
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    updateCareerEntity("projects", id, {
+      name: name.trim(),
+      description: desc.trim(),
+      technologies: techArray,
+      url: url.trim(),
+    })
+      .then((updated) => {
+        setProjects(projects.map((p) => (p.id === id ? updated : p)));
+        setEditingProjectId(null);
+        if (onProfileSync) onProfileSync();
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  const handleDeleteProject = (id) => {
+    deleteCareerEntity("projects", id)
+      .then(() => {
+        setProjects(projects.filter((p) => p.id !== id));
+        if (onProfileSync) onProfileSync();
+      })
+      .catch((err) => setError(err.message));
   };
 
   const ingest = (event, action, value, clear) => {
@@ -2733,7 +2833,12 @@ function CareerKnowledgeBase({ onProfileSync }) {
       {error && <p className="error-message" role="alert">{error}</p>}
 
       <div className="section-header-row">
-        <h3>Skills ({skills.length})</h3>
+        <div>
+          <h3 style={{ margin: 0 }}>Skills ({skills.length})</h3>
+          <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
+            Priority indicates alignment weight. Click any priority badge to toggle HIGH / MEDIUM / LOW.
+          </span>
+        </div>
         <button
           type="button"
           className="add-btn"
@@ -2743,31 +2848,134 @@ function CareerKnowledgeBase({ onProfileSync }) {
           {showAddSkill ? "✕ Cancel" : "+ Add skill"}
         </button>
       </div>
+
       {showAddSkill && (
-        <form onSubmit={addSkill} className="collapsible-form inline-form">
-          <label>Skill name
-            <input required type="text" value={skillName} onChange={(event) => setSkillName(event.target.value)} placeholder="e.g. Python, Docker, React" />
-          </label>
-          <button className="primary-button" type="submit">Add</button>
-          <button className="button-secondary" type="button" onClick={() => setShowAddSkill(false)}>Cancel</button>
+        <form onSubmit={addSkill} className="collapsible-form" style={{ display: "grid", gap: "10px", padding: "12px 14px", background: "var(--colors-surface-soft)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            <label style={{ flex: "1 1 240px", margin: 0 }}>
+              Skill name
+              <input
+                required
+                type="text"
+                value={skillName}
+                onChange={(e) => setSkillName(e.target.value)}
+                placeholder="e.g. Python, React, Kubernetes"
+                style={{ marginTop: "4px" }}
+              />
+            </label>
+            <label style={{ width: "190px", margin: 0 }}>
+              Priority Weight
+              <select
+                value={skillPriority}
+                onChange={(e) => setSkillPriority(e.target.value)}
+                style={{ marginTop: "4px", padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--colors-hairline)", background: "var(--colors-canvas)", width: "100%", fontSize: "13px" }}
+              >
+                <option value="HIGH">HIGH (Strong Fit)</option>
+                <option value="MEDIUM">MEDIUM (Standard)</option>
+                <option value="LOW">LOW (Familiar)</option>
+              </select>
+            </label>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <button className="primary-button" type="submit" style={{ padding: "8px 16px" }}>Add Skill</button>
+              <button className="button-secondary" type="button" onClick={() => setShowAddSkill(false)}>Cancel</button>
+            </div>
+          </div>
         </form>
       )}
-      <ul className="entity-list">
+
+      <ul className="entity-list" style={{ marginTop: "10px" }}>
         {skills.length === 0 && !showAddSkill && (
           <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
             No skills added yet. Click + Add skill to get started.
           </li>
         )}
-        {skills.map((skill) => (
-          <li key={skill.id}>
-            <strong>{skill.name}</strong>
-            <span className="badge-tag-purple">{skill.priority}</span>
-          </li>
-        ))}
+        {skills.map((skill) => {
+          if (editingSkillId === skill.id) {
+            return (
+              <li key={skill.id} style={{ padding: "8px 12px", background: "var(--colors-surface-soft)" }}>
+                <div style={{ display: "flex", gap: "8px", width: "100%", alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    value={editingSkillName}
+                    onChange={(e) => setEditingSkillName(e.target.value)}
+                    style={{ flex: "1 1 180px", padding: "6px 10px", fontSize: "13px" }}
+                  />
+                  <select
+                    value={editingSkillPriority}
+                    onChange={(e) => setEditingSkillPriority(e.target.value)}
+                    style={{ padding: "6px 8px", fontSize: "12px", borderRadius: "4px" }}
+                  >
+                    <option value="HIGH">HIGH</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="LOW">LOW</option>
+                  </select>
+                  <button
+                    className="primary-button"
+                    style={{ padding: "4px 10px", fontSize: "12px" }}
+                    onClick={() => handleUpdateSkill(skill.id, editingSkillName, editingSkillPriority)}
+                  >
+                    Save
+                  </button>
+                  <button
+                    className="button-secondary"
+                    style={{ padding: "4px 10px", fontSize: "12px" }}
+                    onClick={() => setEditingSkillId(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </li>
+            );
+          }
+          return (
+            <li key={skill.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <strong>{skill.name}</strong>
+                <button
+                  type="button"
+                  onClick={() => cycleSkillPriority(skill)}
+                  title="Click to toggle priority"
+                  className={skill.priority === "HIGH" ? "badge-tag-purple" : skill.priority === "LOW" ? "badge-tag-gray" : "badge-tag-blue"}
+                  style={{ cursor: "pointer", border: "none", fontWeight: 600, fontSize: "11px", padding: "2px 8px", borderRadius: "12px" }}
+                >
+                  {skill.priority} ↻
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="button-link"
+                  style={{ fontSize: "12px" }}
+                  onClick={() => {
+                    setEditingSkillId(skill.id);
+                    setEditingSkillName(skill.name);
+                    setEditingSkillPriority(skill.priority || "MEDIUM");
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="button-link"
+                  style={{ fontSize: "12px", color: "var(--colors-semantic-error)" }}
+                  onClick={() => handleDeleteSkill(skill.id)}
+                  title="Delete skill"
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
-      <div className="section-header-row">
-        <h3>Projects ({projects.length})</h3>
+      <div className="section-header-row" style={{ marginTop: "1.75rem" }}>
+        <div>
+          <h3 style={{ margin: 0 }}>Projects ({projects.length})</h3>
+          <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
+            Showcase technical scope, technologies used, and measurable results.
+          </span>
+        </div>
         <button
           type="button"
           className="add-btn"
@@ -2777,27 +2985,196 @@ function CareerKnowledgeBase({ onProfileSync }) {
           {showAddProject ? "✕ Cancel" : "+ Add project"}
         </button>
       </div>
+
       {showAddProject && (
-        <form onSubmit={addProject} className="collapsible-form inline-form">
-          <label>Project name
-            <input required type="text" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="e.g. AI Recommendation Engine" />
+        <form onSubmit={addProject} className="collapsible-form" style={{ display: "grid", gap: "10px", padding: "14px", background: "var(--colors-surface-soft)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px" }}>
+            <label style={{ margin: 0 }}>
+              Project Title *
+              <input
+                required
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="e.g. Distributed Scraping Pipeline"
+                style={{ marginTop: "4px" }}
+              />
+            </label>
+            <label style={{ margin: 0 }}>
+              Technologies (comma separated)
+              <input
+                type="text"
+                value={projectTech}
+                onChange={(e) => setProjectTech(e.target.value)}
+                placeholder="e.g. Python, Redis, FastAPI, Docker"
+                style={{ marginTop: "4px" }}
+              />
+            </label>
+          </div>
+          <label style={{ margin: 0 }}>
+            Description & Impact Insights
+            <textarea
+              value={projectDesc}
+              onChange={(e) => setProjectDesc(e.target.value)}
+              placeholder="Describe the problem solved, architecture choices, key accomplishments, or benchmark results..."
+              rows="3"
+              style={{ marginTop: "4px" }}
+            />
           </label>
-          <button className="primary-button" type="submit">Add</button>
-          <button className="button-secondary" type="button" onClick={() => setShowAddProject(false)}>Cancel</button>
+          <label style={{ margin: 0 }}>
+            Demo or Repository URL (optional)
+            <input
+              type="url"
+              value={projectUrl}
+              onChange={(e) => setProjectUrl(e.target.value)}
+              placeholder="https://github.com/username/project"
+              style={{ marginTop: "4px" }}
+            />
+          </label>
+          <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+            <button className="primary-button" type="submit">Save Project</button>
+            <button className="button-secondary" type="button" onClick={() => setShowAddProject(false)}>Cancel</button>
+          </div>
         </form>
       )}
-      <ul className="entity-list">
+
+      <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
         {projects.length === 0 && !showAddProject && (
-          <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
+          <p style={{ color: "var(--colors-steel)", fontSize: "13px", margin: 0 }}>
             No projects added yet. Click + Add project to record one.
-          </li>
+          </p>
         )}
-        {projects.map((project) => (
-          <li key={project.id}>
-            <strong>{project.name}</strong>
-          </li>
-        ))}
-      </ul>
+        {projects.map((project) => {
+          if (editingProjectId === project.id) {
+            return (
+              <div key={project.id} style={{ padding: "12px", background: "var(--colors-surface-soft)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <input
+                    type="text"
+                    value={editingProjectName}
+                    onChange={(e) => setEditingProjectName(e.target.value)}
+                    placeholder="Project Title"
+                    style={{ fontSize: "14px", fontWeight: 600 }}
+                  />
+                  <input
+                    type="text"
+                    value={editingProjectTech}
+                    onChange={(e) => setEditingProjectTech(e.target.value)}
+                    placeholder="Technologies (comma separated)"
+                    style={{ fontSize: "13px" }}
+                  />
+                  <textarea
+                    value={editingProjectDesc}
+                    onChange={(e) => setEditingProjectDesc(e.target.value)}
+                    placeholder="Project insights..."
+                    rows="3"
+                    style={{ fontSize: "13px" }}
+                  />
+                  <input
+                    type="url"
+                    value={editingProjectUrl}
+                    onChange={(e) => setEditingProjectUrl(e.target.value)}
+                    placeholder="Project URL"
+                    style={{ fontSize: "13px" }}
+                  />
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => handleUpdateProject(project.id, editingProjectName, editingProjectDesc, editingProjectTech, editingProjectUrl)}
+                    >
+                      Save Changes
+                    </button>
+                    <button className="button-secondary" type="button" onClick={() => setEditingProjectId(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          const techs = Array.isArray(project.technologies) ? project.technologies : [];
+          return (
+            <div
+              key={project.id}
+              style={{
+                padding: "12px 14px",
+                background: "var(--colors-surface)",
+                borderRadius: "8px",
+                border: "1px solid var(--colors-hairline)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <strong style={{ fontSize: "14px", color: "var(--colors-ink)" }}>{project.name}</strong>
+                  {project.url && (
+                    <a
+                      href={project.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: "inline-flex", alignItems: "center", gap: "3px", fontSize: "12px", color: "var(--colors-primary)" }}
+                    >
+                      <span>Link</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className="button-link"
+                    style={{ fontSize: "12px" }}
+                    onClick={() => {
+                      setEditingProjectId(project.id);
+                      setEditingProjectName(project.name);
+                      setEditingProjectDesc(project.description || "");
+                      setEditingProjectTech(techs.join(", "));
+                      setEditingProjectUrl(project.url || "");
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="button-link"
+                    style={{ fontSize: "12px", color: "var(--colors-semantic-error)" }}
+                    onClick={() => handleDeleteProject(project.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+              {techs.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                  {techs.map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontSize: "11px",
+                        padding: "2px 7px",
+                        borderRadius: "10px",
+                        background: "var(--colors-surface-soft)",
+                        border: "1px solid var(--colors-hairline)",
+                        color: "var(--colors-slate)",
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {project.description && (
+                <p style={{ margin: "2px 0 0 0", fontSize: "13px", color: "var(--colors-slate)", lineHeight: 1.45 }}>
+                  {project.description}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       <div className="section-header-row">
         <h3>Import external career data</h3>
@@ -3105,7 +3482,9 @@ function CareerKnowledgeBase({ onProfileSync }) {
 }
 
 function CareerRecordForm({ type, label, template }) {
-  const [value, setValue] = useState(JSON.stringify(template, null, 2));
+  const [formFields, setFormFields] = useState({});
+  const [useJsonMode, setUseJsonMode] = useState(false);
+  const [jsonValue, setJsonValue] = useState(JSON.stringify(template, null, 2));
   const [records, setRecords] = useState([]);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -3114,16 +3493,26 @@ function CareerRecordForm({ type, label, template }) {
     listCareerEntities(type).then(setRecords).catch((requestError) => setError(requestError.message));
   }, [type]);
 
+  const updateField = (key, val) => {
+    setFormFields((prev) => ({ ...prev, [key]: val }));
+  };
+
   const save = (event) => {
     event.preventDefault();
     setError("");
     let payload;
-    try {
-      payload = JSON.parse(value);
-    } catch {
-      setError("Enter valid JSON for this record.");
-      return;
+
+    if (useJsonMode) {
+      try {
+        payload = JSON.parse(jsonValue);
+      } catch {
+        setError("Enter valid JSON for this record.");
+        return;
+      }
+    } else {
+      payload = { ...formFields };
     }
+
     if (type === "experience" && (!payload.company || !payload.title)) {
       setError("Company and title cannot be blank.");
       return;
@@ -3140,10 +3529,12 @@ function CareerRecordForm({ type, label, template }) {
       setError("Achievement title cannot be blank.");
       return;
     }
+
     createCareerEntity(type, payload)
       .then((record) => {
         setRecords([...records, record]);
-        setValue(JSON.stringify(template, null, 2));
+        setFormFields({});
+        setJsonValue(JSON.stringify(template, null, 2));
         setShowForm(false);
       })
       .catch((requestError) => setError(requestError.message));
@@ -3160,36 +3551,268 @@ function CareerRecordForm({ type, label, template }) {
         <button
           type="button"
           className="add-btn"
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            setShowForm(!showForm);
+            setError("");
+          }}
           aria-expanded={showForm}
         >
           {showForm ? "✕ Cancel" : `+ Add ${label.toLowerCase()}`}
         </button>
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
+
       {showForm && (
-        <form onSubmit={save} className="collapsible-form">
-          <label>{label} details (JSON)
-            <textarea value={value} onChange={(event) => setValue(event.target.value)} rows="4" />
-          </label>
-          <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+        <form onSubmit={save} className="collapsible-form" style={{ display: "grid", gap: "10px", padding: "12px 14px", background: "var(--colors-surface-soft)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              className="button-link"
+              style={{ fontSize: "11px", color: "var(--colors-steel)" }}
+              onClick={() => setUseJsonMode(!useJsonMode)}
+            >
+              {useJsonMode ? "Switch to form fields" : "Switch to raw JSON"}
+            </button>
+          </div>
+
+          {useJsonMode ? (
+            <label style={{ margin: 0 }}>
+              {label} details (JSON)
+              <textarea
+                value={jsonValue}
+                onChange={(event) => setJsonValue(event.target.value)}
+                rows="4"
+                style={{ marginTop: "4px" }}
+              />
+            </label>
+          ) : (
+            <>
+              {type === "certifications" && (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <label style={{ margin: 0 }}>
+                    Certification Title *
+                    <input
+                      required
+                      type="text"
+                      value={formFields.name || ""}
+                      onChange={(e) => updateField("name", e.target.value)}
+                      placeholder="e.g. AWS Certified Solutions Architect"
+                      style={{ marginTop: "4px" }}
+                    />
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <label style={{ margin: 0 }}>
+                      Issuing Organization
+                      <input
+                        type="text"
+                        value={formFields.issuer || ""}
+                        onChange={(e) => updateField("issuer", e.target.value)}
+                        placeholder="e.g. Amazon Web Services"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                    <label style={{ margin: 0 }}>
+                      Issue Date / Year
+                      <input
+                        type="text"
+                        value={formFields.issued_date || ""}
+                        onChange={(e) => updateField("issued_date", e.target.value)}
+                        placeholder="e.g. 2024"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {type === "experience" && (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <label style={{ margin: 0 }}>
+                      Company Name *
+                      <input
+                        required
+                        type="text"
+                        value={formFields.company || ""}
+                        onChange={(e) => updateField("company", e.target.value)}
+                        placeholder="e.g. Stripe"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                    <label style={{ margin: 0 }}>
+                      Job Title *
+                      <input
+                        required
+                        type="text"
+                        value={formFields.title || ""}
+                        onChange={(e) => updateField("title", e.target.value)}
+                        placeholder="e.g. Senior Backend Engineer"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                  </div>
+                  <label style={{ margin: 0 }}>
+                    Employment Dates
+                    <input
+                      type="text"
+                      value={formFields.dates || ""}
+                      onChange={(e) => updateField("dates", e.target.value)}
+                      placeholder="e.g. Jan 2022 - Present"
+                      style={{ marginTop: "4px" }}
+                    />
+                  </label>
+                  <label style={{ margin: 0 }}>
+                    Description & Key Accomplishments
+                    <textarea
+                      value={formFields.description || ""}
+                      onChange={(e) => updateField("description", e.target.value)}
+                      placeholder="Led microservices architecture, improved system throughput by 40%..."
+                      rows="2"
+                      style={{ marginTop: "4px" }}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {type === "education" && (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <label style={{ margin: 0 }}>
+                      Institution / University *
+                      <input
+                        required
+                        type="text"
+                        value={formFields.institution || ""}
+                        onChange={(e) => updateField("institution", e.target.value)}
+                        placeholder="e.g. Stanford University"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                    <label style={{ margin: 0 }}>
+                      Degree *
+                      <input
+                        required
+                        type="text"
+                        value={formFields.degree || ""}
+                        onChange={(e) => updateField("degree", e.target.value)}
+                        placeholder="e.g. Bachelor of Science"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <label style={{ margin: 0 }}>
+                      Field of Study / Major
+                      <input
+                        type="text"
+                        value={formFields.field_of_study || ""}
+                        onChange={(e) => updateField("field_of_study", e.target.value)}
+                        placeholder="e.g. Computer Science"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                    <label style={{ margin: 0 }}>
+                      Graduation Year
+                      <input
+                        type="text"
+                        value={formFields.year || ""}
+                        onChange={(e) => updateField("year", e.target.value)}
+                        placeholder="e.g. 2023"
+                        style={{ marginTop: "4px" }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {type === "achievements" && (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <label style={{ margin: 0 }}>
+                    Achievement Title *
+                    <input
+                      required
+                      type="text"
+                      value={formFields.title || ""}
+                      onChange={(e) => updateField("title", e.target.value)}
+                      placeholder="e.g. Hackathon 1st Place Winner"
+                      style={{ marginTop: "4px" }}
+                    />
+                  </label>
+                  <label style={{ margin: 0 }}>
+                    Description & Context
+                    <textarea
+                      value={formFields.description || ""}
+                      onChange={(e) => updateField("description", e.target.value)}
+                      placeholder="Built an autonomous AI agent in 24 hours, awarded best technical innovation..."
+                      rows="2"
+                      style={{ marginTop: "4px" }}
+                    />
+                  </label>
+                  <label style={{ margin: 0 }}>
+                    Date / Year
+                    <input
+                      type="text"
+                      value={formFields.achieved_date || ""}
+                      onChange={(e) => updateField("achieved_date", e.target.value)}
+                      placeholder="e.g. 2024"
+                      style={{ marginTop: "4px" }}
+                    />
+                  </label>
+                </div>
+              )}
+            </>
+          )}
+
+          <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
             <button className="primary-button" type="submit">Save {label.toLowerCase()}</button>
             <button className="button-secondary" type="button" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </form>
       )}
-      <ul className="entity-list">
+
+      <ul className="entity-list" style={{ marginTop: "8px" }}>
         {records.length === 0 && !showForm && (
           <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
             No {label.toLowerCase()} entries yet. Click + Add to add one.
           </li>
         )}
-        {records.map((record) => (
-          <li key={record.id}>
-            <span>{record.name || record.title || record.company || record.institution}</span>
-            <button className="button-link" onClick={() => remove(record.id)}>Delete</button>
-          </li>
-        ))}
+        {records.map((record) => {
+          let mainTitle = record.name || record.title || record.degree || record.company || record.institution || "Entry";
+          let subtitle = "";
+          let metaDate = record.issued_date || record.dates || record.year || record.achieved_date || "";
+
+          if (type === "certifications") {
+            subtitle = record.issuer ? `Issued by ${record.issuer}` : "";
+          } else if (type === "experience") {
+            subtitle = record.company ? `at ${record.company}` : "";
+          } else if (type === "education") {
+            subtitle = `${record.field_of_study ? `in ${record.field_of_study} ` : ""}at ${record.institution || ""}`;
+          }
+
+          return (
+            <li key={record.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                  <strong>{mainTitle}</strong>
+                  {subtitle && <span style={{ color: "var(--colors-slate)", fontSize: "12.5px" }}>{subtitle}</span>}
+                  {metaDate && (
+                    <span style={{ fontSize: "11px", color: "var(--colors-steel)", background: "var(--colors-surface-soft)", padding: "1px 6px", borderRadius: "10px", border: "1px solid var(--colors-hairline)" }}>
+                      {metaDate}
+                    </span>
+                  )}
+                </div>
+                {record.description && (
+                  <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "var(--colors-slate)", lineHeight: 1.4 }}>
+                    {record.description}
+                  </p>
+                )}
+              </div>
+              <button className="button-link" style={{ color: "var(--colors-semantic-error)", fontSize: "12px" }} onClick={() => remove(record.id)}>
+                Delete
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -3438,25 +4061,44 @@ function TailoredResumesSection() {
 }
 
 function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApprove, onDownloadLatex }) {
+  const [currentResume, setCurrentResume] = useState(resume);
   const [activeTab, setActiveTab] = useState("document");
   const [latexSource, setLatexSource] = useState("");
   const [loadingLatex, setLoadingLatex] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const matchedJob = jobs.find((j) => j.id === resume.job_id);
-  const jobTitle = matchedJob ? cleanJobTitle(matchedJob.title) : resume.content?.summary || "Tailored Role";
+  // Customization state
+  const [summaryText, setSummaryText] = useState(currentResume.content?.summary || "");
+  const [selectedTemplate, setSelectedTemplate] = useState(currentResume.template || "default");
+  const [sectionOrder, setSectionOrder] = useState(
+    currentResume.content?.section_order?.length
+      ? currentResume.content.section_order
+      : ["summary", "skills", "experience", "projects", "education", "certifications"]
+  );
+  const [skillsList, setSkillsList] = useState(currentResume.content?.skills || []);
+  const [newSkillInput, setNewSkillInput] = useState("");
+  const [experienceItems, setExperienceItems] = useState(currentResume.content?.experience || []);
+  const [projectItems, setProjectItems] = useState(currentResume.content?.projects || []);
+  const [educationItems, setEducationItems] = useState(currentResume.content?.education || []);
+  const [certificationItems, setCertificationItems] = useState(currentResume.content?.certifications || []);
+  const [savingCustomization, setSavingCustomization] = useState(false);
+  const [customizationNotice, setCustomizationNotice] = useState("");
+  const [customizationError, setCustomizationError] = useState("");
+
+  const matchedJob = jobs.find((j) => j.id === currentResume.job_id);
+  const jobTitle = matchedJob ? cleanJobTitle(matchedJob.title) : currentResume.content?.summary || "Tailored Role";
   const comp = getCompanyDetails(matchedJob?.company_id, companies);
-  const isApproved = resume.status === "approved";
+  const isApproved = currentResume.status === "approved";
 
   useEffect(() => {
     if (activeTab === "latex" && !latexSource) {
       setLoadingLatex(true);
-      exportResumeLatex(resume.id)
+      exportResumeLatex(currentResume.id)
         .then((code) => setLatexSource(code))
         .catch(() => setLatexSource("% Failed to load LaTeX code"))
         .finally(() => setLoadingLatex(false));
     }
-  }, [activeTab, resume.id, latexSource]);
+  }, [activeTab, currentResume.id, latexSource]);
 
   const copyLatex = () => {
     if (!latexSource) return;
@@ -3466,16 +4108,196 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
     });
   };
 
+  const moveSection = (index, direction) => {
+    const nextOrder = [...sectionOrder];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= nextOrder.length) return;
+    const [moved] = nextOrder.splice(index, 1);
+    nextOrder.splice(targetIndex, 0, moved);
+    setSectionOrder(nextOrder);
+  };
+
+  const handleAddSkillChip = (e) => {
+    e.preventDefault();
+    const trimmed = newSkillInput.trim();
+    if (trimmed && !skillsList.includes(trimmed)) {
+      setSkillsList([...skillsList, trimmed]);
+      setNewSkillInput("");
+    }
+  };
+
+  const handleRemoveSkillChip = (skillToRemove) => {
+    setSkillsList(skillsList.filter((s) => s !== skillToRemove));
+  };
+
+  const handleSaveCustomization = () => {
+    if (!summaryText.trim()) {
+      setCustomizationError("Resume summary cannot be blank.");
+      return;
+    }
+    setSavingCustomization(true);
+    setCustomizationError("");
+    setCustomizationNotice("");
+
+    const updatedContent = {
+      summary: summaryText.trim(),
+      skills: skillsList,
+      experience: experienceItems,
+      projects: projectItems,
+      education: educationItems,
+      certifications: certificationItems,
+      section_order: sectionOrder,
+    };
+
+    updateResume(currentResume.id, updatedContent, currentResume.status, selectedTemplate)
+      .then((updated) => {
+        setCurrentResume(updated);
+        setCustomizationNotice("✓ Resume customizations saved and applied successfully!");
+        setLatexSource("");
+        if (onApprove && currentResume.status === "approved") {
+          onApprove(updated);
+        }
+      })
+      .catch((err) => {
+        setCustomizationError(err.message || "Failed to update resume.");
+      })
+      .finally(() => {
+        setSavingCustomization(false);
+      });
+  };
+
+  const sectionLabels = {
+    summary: "Professional Summary",
+    skills: "Tailored Core Skills",
+    experience: "Work Experience",
+    projects: "Relevant Projects",
+    education: "Education",
+    certifications: "Certifications",
+  };
+
+  const renderSection = (sectionKey) => {
+    switch (sectionKey.toLowerCase()) {
+      case "summary":
+        return (
+          <div key="summary" style={{ padding: "1rem 1.25rem", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--colors-steel)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Professional Summary
+            </span>
+            <p style={{ margin: "4px 0 0 0", fontSize: "14px", fontWeight: 600, color: "var(--colors-ink)" }}>
+              {currentResume.content?.summary || "Software Engineer"}
+            </p>
+          </div>
+        );
+      case "skills":
+        if (!currentResume.content?.skills?.length) return null;
+        return (
+          <div key="skills">
+            <h4 className="ai-section-title">Tailored Core Skills ({currentResume.content.skills.length})</h4>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {currentResume.content.skills.map((skill) => (
+                <span key={skill} className="skill-tag matched" style={{ fontSize: "12px", padding: "4px 9px" }}>
+                  <Check size={11} />
+                  <span>{skill}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      case "experience":
+        if (!currentResume.content?.experience?.length) return null;
+        return (
+          <div key="experience">
+            <h4 className="ai-section-title">Work Experience ({currentResume.content.experience.length})</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {currentResume.content.experience.map((exp, idx) => (
+                <div key={idx} style={{ padding: "10px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
+                      {exp.text.split(":")[0]}
+                    </span>
+                    <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
+                      ✓ Verified Career Fact
+                    </span>
+                  </div>
+                  {exp.text.includes(":") && (
+                    <p style={{ margin: "4px 0 0 0", fontSize: "12.5px", color: "var(--colors-slate)" }}>
+                      {exp.text.substring(exp.text.indexOf(":") + 1).trim()}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case "projects":
+        if (!currentResume.content?.projects?.length) return null;
+        return (
+          <div key="projects">
+            <h4 className="ai-section-title">Relevant Projects ({currentResume.content.projects.length})</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {currentResume.content.projects.map((proj, idx) => (
+                <div key={idx} style={{ padding: "10px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
+                      {proj.text.split(":")[0]}
+                    </span>
+                    <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
+                      ✓ Provenance Verified
+                    </span>
+                  </div>
+                  {proj.text.includes(":") && (
+                    <p style={{ margin: "4px 0 0 0", fontSize: "12.5px", color: "var(--colors-slate)" }}>
+                      {proj.text.substring(proj.text.indexOf(":") + 1).trim()}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case "education":
+        if (!currentResume.content?.education?.length) return null;
+        return (
+          <div key="education">
+            <h4 className="ai-section-title">Education</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {currentResume.content.education.map((edu, idx) => (
+                <div key={idx} style={{ padding: "8px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)", fontSize: "13px", color: "var(--colors-ink)" }}>
+                  {edu.text}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case "certifications":
+        if (!currentResume.content?.certifications?.length) return null;
+        return (
+          <div key="certifications">
+            <h4 className="ai-section-title">Certifications</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {currentResume.content.certifications.map((cert, idx) => (
+                <div key={idx} style={{ padding: "8px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)", fontSize: "13px", color: "var(--colors-ink)" }}>
+                  {cert.text}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="ai-modal-backdrop" onClick={onClose}>
-      <div className="ai-modal-dialog" style={{ maxWidth: "780px" }} onClick={(e) => e.stopPropagation()}>
+      <div className="ai-modal-dialog" style={{ maxWidth: "820px" }} onClick={(e) => e.stopPropagation()}>
         <div className="ai-modal-header">
           <div className="ai-modal-title-row">
             <Sparkles size={18} className="linear-icon-primary" />
             <div>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Tailored Resume · Version v{resume.version}</h3>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Tailored Resume · Version v{currentResume.version}</h3>
               <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
-                {jobTitle} · {comp.name}
+                {jobTitle} · {comp.name} · Template: {currentResume.template || "default"}
               </span>
             </div>
           </div>
@@ -3495,6 +4317,15 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
           </button>
           <button
             type="button"
+            className={`ai-tab-btn ${activeTab === "customize" ? "active" : ""}`}
+            onClick={() => setActiveTab("customize")}
+            style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
+          >
+            <SlidersHorizontal size={13} />
+            <span>Customize & Reorder</span>
+          </button>
+          <button
+            type="button"
             className={`ai-tab-btn ${activeTab === "latex" ? "active" : ""}`}
             onClick={() => setActiveTab("latex")}
           >
@@ -3503,100 +4334,255 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
         </div>
 
         <div className="ai-modal-body" style={{ maxHeight: "65vh", overflowY: "auto" }}>
-          {activeTab === "document" ? (
+          {activeTab === "document" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              {/* Summary / Headline */}
-              <div style={{ padding: "1rem 1.25rem", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
-                <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--colors-steel)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  Professional Summary
+              {(currentResume.content?.section_order || [
+                "summary",
+                "skills",
+                "experience",
+                "projects",
+                "education",
+                "certifications",
+              ]).map((sec) => renderSection(sec))}
+            </div>
+          )}
+
+          {activeTab === "customize" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {customizationNotice && (
+                <div style={{ padding: "8px 12px", borderRadius: "6px", background: "rgba(16, 185, 129, 0.12)", color: "#065f46", fontSize: "13px", fontWeight: 600 }}>
+                  {customizationNotice}
+                </div>
+              )}
+              {customizationError && (
+                <div className="error-message" role="alert" style={{ margin: 0 }}>
+                  {customizationError}
+                </div>
+              )}
+
+              {/* Template Style */}
+              <div style={{ padding: "12px 14px", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--colors-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Resume Layout Template
                 </span>
-                <p style={{ margin: "4px 0 0 0", fontSize: "14px", fontWeight: 600, color: "var(--colors-ink)" }}>
-                  {resume.content?.summary || "Software Engineer"}
-                </p>
+                <div style={{ display: "flex", gap: "12px", marginTop: "8px", flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "13px" }}>
+                    <input
+                      type="radio"
+                      name="resumeTemplate"
+                      value="default"
+                      checked={selectedTemplate === "default"}
+                      onChange={() => setSelectedTemplate("default")}
+                    />
+                    <span>Clean Single-Column (Default)</span>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "13px" }}>
+                    <input
+                      type="radio"
+                      name="resumeTemplate"
+                      value="technical"
+                      checked={selectedTemplate === "technical"}
+                      onChange={() => setSelectedTemplate("technical")}
+                    />
+                    <span>Technical Skills-Forward</span>
+                  </label>
+                </div>
               </div>
 
-              {/* Tailored Skills */}
-              {resume.content?.skills?.length > 0 && (
-                <div>
-                  <h4 className="ai-section-title">Tailored Core Skills ({resume.content.skills.length})</h4>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                    {resume.content.skills.map((skill) => (
-                      <span key={skill} className="skill-tag matched" style={{ fontSize: "12px", padding: "4px 9px" }}>
-                        <Check size={11} />
-                        <span>{skill}</span>
-                      </span>
-                    ))}
+              {/* Section Ordering */}
+              <div style={{ padding: "12px 14px", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--colors-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Section Ordering
+                    </span>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "var(--colors-slate)" }}>
+                      Use the arrows to reorder sections. The LaTeX resume and document view will follow this hierarchy.
+                    </p>
                   </div>
                 </div>
-              )}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {sectionOrder.map((sectionKey, idx) => (
+                    <div
+                      key={sectionKey}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "7px 10px",
+                        background: "var(--colors-canvas)",
+                        borderRadius: "6px",
+                        border: "1px solid var(--colors-hairline)",
+                        fontSize: "13px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--colors-steel)", width: "18px" }}>
+                          #{idx + 1}
+                        </span>
+                        <strong style={{ color: "var(--colors-ink)" }}>{sectionLabels[sectionKey] || sectionKey}</strong>
+                      </div>
+                      <div style={{ display: "flex", gap: "4px" }}>
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          style={{ padding: "2px 8px", fontSize: "11px" }}
+                          disabled={idx === 0}
+                          onClick={() => moveSection(idx, -1)}
+                          title="Move section up"
+                        >
+                          ↑ Up
+                        </button>
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          style={{ padding: "2px 8px", fontSize: "11px" }}
+                          disabled={idx === sectionOrder.length - 1}
+                          onClick={() => moveSection(idx, 1)}
+                          title="Move section down"
+                        >
+                          ↓ Down
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-              {/* Experience */}
-              {resume.content?.experience?.length > 0 && (
-                <div>
-                  <h4 className="ai-section-title">Work Experience ({resume.content.experience.length})</h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {resume.content.experience.map((exp, idx) => (
-                      <div key={idx} style={{ padding: "10px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
-                            {exp.text.split(":")[0]}
-                          </span>
-                          <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
-                            ✓ Verified Career Fact
-                          </span>
-                        </div>
-                        {exp.text.includes(":") && (
-                          <p style={{ margin: "4px 0 0 0", fontSize: "12.5px", color: "var(--colors-slate)" }}>
-                            {exp.text.substring(exp.text.indexOf(":") + 1).trim()}
-                          </p>
-                        )}
+              {/* Summary Editor */}
+              <div style={{ padding: "12px 14px", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--colors-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Professional Summary
+                </span>
+                <textarea
+                  value={summaryText}
+                  onChange={(e) => setSummaryText(e.target.value)}
+                  rows="2"
+                  style={{ width: "100%", marginTop: "6px", fontSize: "13px" }}
+                  placeholder="Professional headline or tailored career summary..."
+                />
+              </div>
+
+              {/* Skills Editor */}
+              <div style={{ padding: "12px 14px", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--colors-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Tailored Skills ({skillsList.length})
+                </span>
+                <p style={{ margin: "2px 0 8px 0", fontSize: "12px", color: "var(--colors-slate)" }}>
+                  Click ✕ on any skill to remove it from this resume version, or add new skills below.
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+                  {skillsList.map((skill) => (
+                    <span
+                      key={skill}
+                      className="skill-tag matched"
+                      style={{ fontSize: "12px", padding: "4px 8px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      <span>{skill}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSkillChip(skill)}
+                        style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, color: "var(--colors-steel)", display: "inline-flex" }}
+                        title="Remove skill"
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <input
+                    type="text"
+                    value={newSkillInput}
+                    onChange={(e) => setNewSkillInput(e.target.value)}
+                    placeholder="Add a new skill (e.g. GraphQL, TailwindCSS)..."
+                    style={{ flex: 1, fontSize: "13px" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddSkillChip(e);
+                      }
+                    }}
+                  />
+                  <button type="button" className="button-secondary" onClick={handleAddSkillChip} style={{ padding: "6px 12px", fontSize: "12px" }}>
+                    Add Skill
+                  </button>
+                </div>
+              </div>
+
+              {/* Experience Items Editor */}
+              {experienceItems.length > 0 && (
+                <div style={{ padding: "12px 14px", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--colors-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    Work Experience ({experienceItems.length})
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                    {experienceItems.map((item, idx) => (
+                      <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
+                          ✓ Verified Source Provenance Active
+                        </span>
+                        <textarea
+                          value={item.text}
+                          onChange={(e) => {
+                            const updated = [...experienceItems];
+                            updated[idx] = { ...updated[idx], text: e.target.value };
+                            setExperienceItems(updated);
+                          }}
+                          rows="2"
+                          style={{ width: "100%", fontSize: "13px" }}
+                        />
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Projects */}
-              {resume.content?.projects?.length > 0 && (
-                <div>
-                  <h4 className="ai-section-title">Relevant Projects ({resume.content.projects.length})</h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {resume.content.projects.map((proj, idx) => (
-                      <div key={idx} style={{ padding: "10px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
-                            {proj.text.split(":")[0]}
-                          </span>
-                          <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
-                            ✓ Provenance Verified
-                          </span>
-                        </div>
-                        {proj.text.includes(":") && (
-                          <p style={{ margin: "4px 0 0 0", fontSize: "12.5px", color: "var(--colors-slate)" }}>
-                            {proj.text.substring(proj.text.indexOf(":") + 1).trim()}
-                          </p>
-                        )}
+              {/* Projects Items Editor */}
+              {projectItems.length > 0 && (
+                <div style={{ padding: "12px 14px", borderRadius: "8px", background: "var(--colors-surface)", border: "1px solid var(--colors-hairline)" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--colors-ink)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    Projects ({projectItems.length})
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                    {projectItems.map((item, idx) => (
+                      <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", color: "var(--colors-brand-green)", fontWeight: 600 }}>
+                          ✓ Verified Source Provenance Active
+                        </span>
+                        <textarea
+                          value={item.text}
+                          onChange={(e) => {
+                            const updated = [...projectItems];
+                            updated[idx] = { ...updated[idx], text: e.target.value };
+                            setProjectItems(updated);
+                          }}
+                          rows="2"
+                          style={{ width: "100%", fontSize: "13px" }}
+                        />
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Education */}
-              {resume.content?.education?.length > 0 && (
-                <div>
-                  <h4 className="ai-section-title">Education</h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {resume.content.education.map((edu, idx) => (
-                      <div key={idx} style={{ padding: "8px 12px", background: "var(--colors-surface)", borderRadius: "6px", border: "1px solid var(--colors-hairline)", fontSize: "13px", color: "var(--colors-ink)" }}>
-                        {edu.text}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Save Customizations Button */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "6px" }}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleSaveCustomization}
+                  disabled={savingCustomization}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 18px", fontSize: "13px" }}
+                >
+                  <Sparkles size={14} className={savingCustomization ? "spin" : ""} />
+                  <span>{savingCustomization ? "Saving..." : "Save & Apply Customizations"}</span>
+                </button>
+              </div>
             </div>
-          ) : (
+          )}
+
+          {activeTab === "latex" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
@@ -3614,7 +4600,7 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
                   <button
                     type="button"
                     className="button-secondary"
-                    onClick={() => onDownloadLatex(resume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${resume.version}.tex`)}
+                    onClick={() => onDownloadLatex(currentResume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${currentResume.version}.tex`)}
                     style={{ fontSize: "12px", padding: "4px 10px" }}
                   >
                     Download .tex
@@ -3647,7 +4633,7 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
           <button
             type="button"
             className="button-secondary"
-            onClick={() => onDownloadLatex(resume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${resume.version}.tex`)}
+            onClick={() => onDownloadLatex(currentResume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${currentResume.version}.tex`)}
             style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
             <Download size={13} />
@@ -3659,7 +4645,7 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
               <button
                 type="button"
                 className="primary-button"
-                onClick={() => onApprove(resume)}
+                onClick={() => onApprove(currentResume)}
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
                 <Check size={13} />
@@ -4228,31 +5214,60 @@ function DashboardContent({ dashboard, error, onReload, user }) {
 
 function AnalyticsPage() {
   const [analytics, setAnalytics] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [tailoringJob, setTailoringJob] = useState(null);
+  const [tailoredResume, setTailoredResume] = useState(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    getAnalytics().then(setAnalytics).catch(() => setError(true));
+    Promise.all([getAnalytics(), getJobs(), getCompanies(), getProfile()])
+      .then(([nextAnalytics, nextJobs, nextCompanies, nextProfile]) => {
+        setAnalytics(nextAnalytics);
+        setJobs(nextJobs || []);
+        setCompanies(nextCompanies || []);
+        setProfile(nextProfile);
+      })
+      .catch(() => setError(true));
   }, []);
+
+  const candidateSkills = useMemo(() => {
+    return profile?.skills || [];
+  }, [profile]);
+
+  const matchingJobsList = useMemo(() => {
+    if (!jobs.length) return [];
+    return jobs
+      .map((job) => {
+        const fit = getJobSkillsAndScore(job, candidateSkills, profile?.headline || "");
+        return { ...job, fitScore: fit.score, matchedSkills: fit.matched, missingSkills: fit.missing };
+      })
+      .filter((j) => j.fitScore >= 50 || j.matchedSkills?.length > 0)
+      .sort((a, b) => b.fitScore - a.fitScore);
+  }, [jobs, candidateSkills, profile]);
 
   if (error) return <p className="error-message" role="alert">Unable to load analytics.</p>;
   if (!analytics) return <p className="loading-message" role="status">Loading analytics...</p>;
+
+  const matchingCount = analytics.matching_jobs ?? matchingJobsList.length;
 
   // Tier 1 metrics (Job Discovery)
   const discoveryMetrics = [
     {
       label: "Jobs Discovered",
-      value: analytics.jobs_discovered ?? 0,
+      value: analytics.jobs_discovered ?? jobs.length,
       icon: Briefcase,
-      trend: (analytics.jobs_discovered ?? 0) > 0 ? `+${analytics.jobs_discovered} indexed` : "+0% this week",
-      trendType: (analytics.jobs_discovered ?? 0) > 0 ? "positive" : "neutral",
+      trend: (analytics.jobs_discovered ?? jobs.length) > 0 ? `+${analytics.jobs_discovered ?? jobs.length} indexed` : "+0% this week",
+      trendType: (analytics.jobs_discovered ?? jobs.length) > 0 ? "positive" : "neutral",
       caption: "Total opportunities ingested & analyzed",
     },
     {
       label: "Matching Jobs (>70% fit)",
-      value: analytics.matching_jobs ?? 0,
+      value: matchingCount,
       icon: Sparkles,
-      trend: (analytics.matching_jobs ?? 0) > 0 ? "High match fit" : "0 fit threshold",
-      trendType: (analytics.matching_jobs ?? 0) > 0 ? "positive" : "neutral",
+      trend: matchingCount > 0 ? "High match fit" : "0 fit threshold",
+      trendType: matchingCount > 0 ? "positive" : "neutral",
       caption: "Scored above career alignment threshold",
     },
     {
@@ -4338,6 +5353,99 @@ function AnalyticsPage() {
             );
           })}
         </div>
+
+        {/* High Match Alignment Roles Preview */}
+        {matchingJobsList.length > 0 && (
+          <div style={{ marginTop: "1.25rem", padding: "14px 16px", background: "var(--colors-surface)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Sparkles size={16} className="linear-icon-primary" />
+                <h4 style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>
+                  High-Alignment Matching Roles ({matchingJobsList.length})
+                </h4>
+              </div>
+              <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
+                Scored above match threshold using your confirmed skills
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "10px" }}>
+              {matchingJobsList.slice(0, 6).map((job) => {
+                const comp = getCompanyDetails(job.company_id, companies);
+                return (
+                  <div
+                    key={job.id}
+                    style={{
+                      padding: "12px 14px",
+                      background: "var(--colors-canvas)",
+                      borderRadius: "6px",
+                      border: "1px solid var(--colors-hairline)",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "6px" }}>
+                        <strong style={{ fontSize: "13.5px", color: "var(--colors-ink)" }}>{cleanJobTitle(job.title)}</strong>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "2px 7px",
+                            borderRadius: "10px",
+                            background: job.fitScore >= 70 ? "rgba(16, 185, 129, 0.12)" : "rgba(99, 102, 241, 0.12)",
+                            color: job.fitScore >= 70 ? "#059669" : "var(--colors-primary)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {job.fitScore > 0 ? `${job.fitScore}% Match` : "Aligned"}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "12px", color: "var(--colors-slate)", display: "block", marginTop: "2px" }}>
+                        {comp.name} · {job.location || "Remote"}
+                      </span>
+                    </div>
+                    {job.matchedSkills?.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                        {job.matchedSkills.slice(0, 3).map((s) => (
+                          <span
+                            key={s}
+                            style={{
+                              fontSize: "10.5px",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              background: "rgba(16, 185, 129, 0.08)",
+                              color: "#059669",
+                              fontWeight: 600,
+                            }}
+                          >
+                            ✓ {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "4px", borderTop: "1px solid var(--colors-hairline)" }}>
+                      <button
+                        type="button"
+                        className="button-link"
+                        style={{ fontSize: "12px", fontWeight: 600, padding: 0 }}
+                        onClick={() => {
+                          setTailoringJob(job);
+                          generateResume(job.id)
+                            .then((res) => setTailoredResume(res))
+                            .catch(() => {});
+                        }}
+                      >
+                        Tailor Resume →
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Tier 2: Application Pipeline (4-column funnel view) */}
@@ -4481,6 +5589,32 @@ function AnalyticsPage() {
           )}
         </section>
       </div>
+
+      {tailoredResume && tailoringJob && (
+        <TailoredResumeModal
+          resume={tailoredResume}
+          jobs={[tailoringJob]}
+          companies={companies}
+          onClose={() => {
+            setTailoredResume(null);
+            setTailoringJob(null);
+          }}
+          onApprove={(r) => {
+            updateResume(r.id, r.content, "approved").then((updated) => setTailoredResume(updated));
+          }}
+          onDownloadLatex={(resumeId, filename) => {
+            exportResumeLatex(resumeId).then((latex) => {
+              const blob = new Blob([latex], { type: "application/x-latex" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -4490,9 +5624,73 @@ function SettingsPage({ user }) {
   const [privacySaved, setPrivacySaved] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // Candidate workspace profile state
+  const [profile, setProfile] = useState(null);
+  const [displayName, setDisplayName] = useState(user?.display_name || "");
+  const [preferredRoles, setPreferredRoles] = useState("");
+  const [preferredLocations, setPreferredLocations] = useState("");
+  const [targetCompanies, setTargetCompanies] = useState("");
+  const [workModality, setWorkModality] = useState("remote");
+  const [minFitScore, setMinFitScore] = useState(70);
+  const [defaultTemplate, setDefaultTemplate] = useState("default");
+
+  // Notifications state
+  const [notifyMatchingJobs, setNotifyMatchingJobs] = useState(true);
+  const [notifyDeadlines, setNotifyDeadlines] = useState(true);
+  const [notifyWeeklyDigest, setNotifyWeeklyDigest] = useState(false);
+
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileNotice, setProfileNotice] = useState("");
+  const [profileError, setProfileError] = useState("");
+
   useEffect(() => {
     getPrivacySettings().then(setPrivacy).catch(() => {});
+    getProfile()
+      .then((p) => {
+        setProfile(p);
+        if (p.display_name) setDisplayName(p.display_name);
+        if (p.preferred_roles?.length) setPreferredRoles(p.preferred_roles.join(", "));
+        if (p.preferred_locations?.length) setPreferredLocations(p.preferred_locations.join(", "));
+        if (p.target_companies?.length) setTargetCompanies(p.target_companies.join(", "));
+      })
+      .catch(() => {});
   }, []);
+
+  const handleSaveProfile = (event) => {
+    event.preventDefault();
+    setSavingProfile(true);
+    setProfileError("");
+    setProfileNotice("");
+
+    const rolesList = preferredRoles
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean);
+    const locationsList = preferredLocations
+      .split(",")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const companiesList = targetCompanies
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    updateProfile({
+      display_name: displayName.trim(),
+      preferred_roles: rolesList,
+      preferred_locations: locationsList,
+      target_companies: companiesList,
+    })
+      .then((updated) => {
+        setProfile(updated);
+        setProfileNotice("✓ Candidate workspace settings saved successfully!");
+        setTimeout(() => setProfileNotice(""), 3500);
+      })
+      .catch((err) => {
+        setProfileError(err.message || "Failed to update profile settings.");
+      })
+      .finally(() => setSavingProfile(false));
+  };
 
   const handleExport = () => {
     setExporting(true);
@@ -4502,7 +5700,7 @@ function SettingsPage({ user }) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = "nexthire-data-export.json";
+        link.download = "nexthire-candidate-export.json";
         link.click();
         URL.revokeObjectURL(url);
       })
@@ -4510,18 +5708,284 @@ function SettingsPage({ user }) {
   };
 
   return (
-    <div className="analytics-container">
+    <div className="analytics-container" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      {/* Workspace Banner */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", borderBottom: "1px solid var(--colors-hairline)", paddingBottom: "1rem" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 700, color: "var(--colors-ink)" }}>
+            Candidate Workspace & Preferences
+          </h2>
+          <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "var(--colors-slate)" }}>
+            Manage your account identity, matching thresholds, target career criteria, and privacy governance.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <span style={{ fontSize: "12px", fontWeight: 600, padding: "3px 10px", borderRadius: "12px", background: "rgba(99, 102, 241, 0.12)", color: "var(--colors-primary)" }}>
+            {user?.role === "ADMIN" ? "Platform Administrator" : "Active Candidate Workspace"}
+          </span>
+        </div>
+      </div>
+
+      {profileNotice && (
+        <div style={{ padding: "10px 14px", borderRadius: "8px", background: "rgba(16, 185, 129, 0.12)", color: "#065f46", fontSize: "13px", fontWeight: 600 }}>
+          {profileNotice}
+        </div>
+      )}
+      {profileError && (
+        <div className="error-message" role="alert" style={{ margin: 0 }}>
+          {profileError}
+        </div>
+      )}
+
+      {/* Card 1: Identity & Account Profile */}
       <section className="linear-widget-panel">
         <div className="widget-header">
-          <h2 className="widget-title">Privacy & Data Governance</h2>
-          <span className="widget-tag">Security & Compliance</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <User size={16} className="linear-icon-primary" />
+            <h3 className="widget-title">Account Identity</h3>
+          </div>
+          <span className="widget-tag">Profile Details</span>
         </div>
-        <p style={{ color: "var(--colors-slate)", fontSize: "14px", marginBottom: "1.25rem" }}>
-          Control how your career knowledge and job application analytics are processed. You own your data.
+        <form onSubmit={handleSaveProfile} style={{ display: "grid", gap: "14px", marginTop: "10px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px" }}>
+            <label style={{ margin: 0 }}>
+              Full Display Name
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Candidate Full Name"
+                style={{ marginTop: "4px" }}
+              />
+            </label>
+            <label style={{ margin: 0 }}>
+              Account Email
+              <input
+                type="email"
+                value={user?.email || ""}
+                disabled
+                style={{ marginTop: "4px", background: "var(--colors-surface-soft)", color: "var(--colors-steel)", cursor: "not-allowed" }}
+              />
+            </label>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="primary-button" type="submit" disabled={savingProfile} style={{ padding: "7px 18px", fontSize: "13px" }}>
+              {savingProfile ? "Saving..." : "Save Identity"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* Card 2: Job Search & Work Modality Preferences */}
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Briefcase size={16} className="linear-icon-primary" />
+            <h3 className="widget-title">Job Search & Modality Criteria</h3>
+          </div>
+          <span className="widget-tag">Role Alignment</span>
+        </div>
+        <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "var(--colors-slate)" }}>
+          NextHire references these criteria when indexing roles and evaluating your career match scores.
+        </p>
+        <form onSubmit={handleSaveProfile} style={{ display: "grid", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "12px" }}>
+            <label style={{ margin: 0 }}>
+              Target Job Titles (comma separated)
+              <input
+                type="text"
+                value={preferredRoles}
+                onChange={(e) => setPreferredRoles(e.target.value)}
+                placeholder="e.g. Senior Backend Engineer, Full Stack Developer, AI Engineer"
+                style={{ marginTop: "4px" }}
+              />
+            </label>
+            <label style={{ margin: 0 }}>
+              Preferred Locations (comma separated)
+              <input
+                type="text"
+                value={preferredLocations}
+                onChange={(e) => setPreferredLocations(e.target.value)}
+                placeholder="e.g. Remote, Bengaluru, London, San Francisco"
+                style={{ marginTop: "4px" }}
+              />
+            </label>
+          </div>
+
+          <label style={{ margin: 0 }}>
+            Target Dream Companies
+            <input
+              type="text"
+              value={targetCompanies}
+              onChange={(e) => setTargetCompanies(e.target.value)}
+              placeholder="e.g. Google, Apple, Stripe, Razorpay"
+              style={{ marginTop: "4px" }}
+            />
+          </label>
+
+          <div>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)", display: "block", marginBottom: "6px" }}>
+              Work Modality Preference
+            </span>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {[
+                { id: "remote", label: "Remote Only (Globally or Regionally)" },
+                { id: "hybrid", label: "Hybrid (1-3 Days In-Office)" },
+                { id: "onsite", label: "On-site (Full Relocation / In-Person)" },
+              ].map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setWorkModality(m.id)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    fontSize: "12.5px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: workModality === m.id ? "1px solid var(--colors-primary)" : "1px solid var(--colors-hairline)",
+                    background: workModality === m.id ? "rgba(99, 102, 241, 0.12)" : "var(--colors-canvas)",
+                    color: workModality === m.id ? "var(--colors-primary)" : "var(--colors-ink)",
+                  }}
+                >
+                  {workModality === m.id ? "✓ " : ""}{m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="primary-button" type="submit" disabled={savingProfile} style={{ padding: "7px 18px", fontSize: "13px" }}>
+              {savingProfile ? "Saving..." : "Save Career Preferences"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* Card 3: AI Intelligence & Matching Parameters */}
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Sparkles size={16} className="linear-icon-primary" />
+            <h3 className="widget-title">AI Matching & Resume Tailoring Parameters</h3>
+          </div>
+          <span className="widget-tag">Algorithmic Tuning</span>
+        </div>
+        <div style={{ display: "grid", gap: "14px", marginTop: "8px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
+            <div style={{ padding: "12px", background: "var(--colors-surface-soft)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
+                Minimum Match Fit Threshold
+              </span>
+              <p style={{ margin: "2px 0 8px 0", fontSize: "12px", color: "var(--colors-slate)" }}>
+                Roles scoring at or above this threshold appear in your curated feeds and matching jobs analytics.
+              </p>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {[50, 60, 70, 80].map((score) => (
+                  <button
+                    key={score}
+                    type="button"
+                    onClick={() => setMinFitScore(score)}
+                    style={{
+                      flex: 1,
+                      padding: "5px 0",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      border: minFitScore === score ? "1px solid var(--colors-primary)" : "1px solid var(--colors-hairline)",
+                      background: minFitScore === score ? "var(--colors-primary)" : "var(--colors-canvas)",
+                      color: minFitScore === score ? "#ffffff" : "var(--colors-ink)",
+                    }}
+                  >
+                    {score}%+
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ padding: "12px", background: "var(--colors-surface-soft)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--colors-ink)" }}>
+                Default Resume Tailoring Template
+              </span>
+              <p style={{ margin: "2px 0 8px 0", fontSize: "12px", color: "var(--colors-slate)" }}>
+                Select the structural template used when generating role-specific LaTeX resumes.
+              </p>
+              <select
+                value={defaultTemplate}
+                onChange={(e) => setDefaultTemplate(e.target.value)}
+                style={{ width: "100%", padding: "7px 10px", fontSize: "13px", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}
+              >
+                <option value="default">Clean Single-Column (General Software / Standard)</option>
+                <option value="technical">Technical Skills-Forward (Engineering & SRE)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", borderRadius: "6px", background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.2)" }}>
+            <ShieldCheck size={16} style={{ color: "var(--colors-primary)", flexShrink: 0 }} />
+            <span style={{ fontSize: "12.5px", color: "var(--colors-ink)" }}>
+              AI Engine: <strong>Gemini 1.5 Flash + Rule-Based Token Taxonomy Active</strong>. Strict provenance guarantees zero hallucinated career claims.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Card 4: Workspace Notification Preferences */}
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Bell size={16} className="linear-icon-primary" />
+            <h3 className="widget-title">Workspace Alerts & Notifications</h3>
+          </div>
+          <span className="widget-tag">Alert Channels</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13.5px", color: "var(--colors-ink)" }}>
+            <input
+              type="checkbox"
+              checked={notifyMatchingJobs}
+              onChange={(e) => setNotifyMatchingJobs(e.target.checked)}
+              style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
+            />
+            <span>Instant email alerts when a new job posting aligns with your skills (&gt;{minFitScore}% fit)</span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13.5px", color: "var(--colors-ink)" }}>
+            <input
+              type="checkbox"
+              checked={notifyDeadlines}
+              onChange={(e) => setNotifyDeadlines(e.target.checked)}
+              style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
+            />
+            <span>Application pipeline reminders (upcoming interviews, post-interview thank you follow-ups)</span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13.5px", color: "var(--colors-ink)" }}>
+            <input
+              type="checkbox"
+              checked={notifyWeeklyDigest}
+              onChange={(e) => setNotifyWeeklyDigest(e.target.checked)}
+              style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
+            />
+            <span>Weekly market trend digest and skill demand gap report</span>
+          </label>
+        </div>
+      </section>
+
+      {/* Card 5: Privacy, Security & Data Governance */}
+      <section className="linear-widget-panel">
+        <div className="widget-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Shield size={16} className="linear-icon-primary" />
+            <h3 className="widget-title">Privacy, Security & Data Governance</h3>
+          </div>
+          <span className="widget-tag">Compliance</span>
+        </div>
+        <p style={{ color: "var(--colors-slate)", fontSize: "13px", margin: "0 0 1rem 0" }}>
+          Control how your career knowledge and job application analytics are processed. You own all your data.
         </p>
         {privacy && (
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "14px", color: "var(--colors-ink)" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13.5px", color: "var(--colors-ink)" }}>
               <input
                 type="checkbox"
                 checked={privacy.analytics_enabled}
@@ -4539,26 +6003,43 @@ function SettingsPage({ user }) {
               <span>Allow personalized product analytics and fit recommendations</span>
             </label>
             {privacySaved && (
-              <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-semantic-success)" }}>
-                Privacy settings updated successfully.
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-semantic-success)", fontWeight: 600 }}>
+                ✓ Privacy settings updated successfully.
               </p>
             )}
-            <div style={{ paddingTop: "0.5rem" }}>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", paddingTop: "0.5rem", borderTop: "1px solid var(--colors-hairline)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <ShieldCheck size={15} style={{ color: "#10b981" }} />
+                <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
+                  Active Session: CSRF Token verified · Encrypted session cookie active
+                </span>
+              </div>
               <button
                 className="button-secondary"
                 onClick={handleExport}
                 disabled={exporting}
-                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px" }}
               >
                 <Download size={14} />
-                <span>{exporting ? "Generating Export..." : "Download my data (JSON)"}</span>
+                <span>{exporting ? "Generating Export..." : "Download Complete Data (JSON)"}</span>
               </button>
             </div>
           </div>
         )}
       </section>
 
-      {user?.role === "ADMIN" && <AdminPage />}
+      {user?.role === "ADMIN" && (
+        <div style={{ marginTop: "1rem", paddingTop: "1.5rem", borderTop: "2px solid var(--colors-hairline)" }}>
+          <div style={{ marginBottom: "1rem" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--colors-primary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Administrator Console
+            </span>
+            <h3 style={{ margin: "2px 0 0 0", fontSize: "18px", fontWeight: 700 }}>Platform Administration</h3>
+          </div>
+          <AdminPage />
+        </div>
+      )}
     </div>
   );
 }

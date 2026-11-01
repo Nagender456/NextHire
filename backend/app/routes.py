@@ -121,6 +121,7 @@ from app.resumes import (
     render_latex,
     validate_content,
     validate_format,
+    validate_template,
 )
 from app.notifications import (
     create_application_reminders,
@@ -318,8 +319,15 @@ async def update_skill(
 
 @router.delete("/career/skills/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_skill(entity_id: str, user: User = Depends(require_user)) -> None:
+    entity = auth_store.career_entities.get(user.id, {}).get("skills", {}).get(entity_id)
+    skill_name = entity.get("name") if entity else None
     _delete_entity("skills", entity_id, user)
     vector_search.index.delete_entity(user.id, "career", entity_id)
+    if skill_name:
+        prof = auth_store.get_profile(user.id)
+        if skill_name in prof.skills:
+            new_skills = [s for s in prof.skills if s != skill_name]
+            auth_store.profiles[user.id] = prof.model_copy(update={"skills": new_skills})
 
 
 @router.get("/career/projects", response_model=list[Project])
@@ -665,6 +673,9 @@ def sync_extracted_entity_to_career_knowledge(
         )
 
     elif etype == "projects":
+        tech_list = data.get("technologies") or []
+        if isinstance(tech_list, str):
+            tech_list = [t.strip() for t in tech_list.split(",") if t.strip()]
         auth_store.create_entity(
             user_id,
             "projects",
@@ -672,6 +683,8 @@ def sync_extracted_entity_to_career_knowledge(
                 "name": data.get("name")
                 or (raw_text.splitlines()[0][:60] if raw_text else "Project"),
                 "description": data.get("description") or raw_text[:500],
+                "technologies": tech_list,
+                "url": data.get("url") or "",
                 "source_type": "resume",
                 "source_id": document_id,
                 "confirmed_by_user": True,
@@ -686,6 +699,7 @@ def sync_extracted_entity_to_career_knowledge(
                 "name": data.get("name")
                 or (raw_text.splitlines()[0][:80] if raw_text else "Certification"),
                 "issuer": data.get("issuer") or "Verified Authority",
+                "issued_date": data.get("issued_date") or data.get("year") or "",
                 "source_type": "resume",
                 "source_id": document_id,
                 "confirmed_by_user": True,
@@ -1112,6 +1126,9 @@ async def update_resume(
     resume["content"] = payload.content
     if payload.status is not None:
         resume["status"] = payload.status
+    if payload.template is not None:
+        validate_template(payload.template)
+        resume["template"] = payload.template
     resume["updated_at"] = datetime.now(UTC)
     return resume
 

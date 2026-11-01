@@ -18,16 +18,26 @@ def get_user_analytics(user_id: str) -> UserAnalytics:
         for application in service.list_applications()
         if application.user_id == user_id
     ]
-    profile_skills = {skill.casefold() for skill in profile.skills}
+    from app.intelligence import analyze_job, normalize_skill
+
+    # Collect all user skills from profile, preferred skills, and confirmed CKB skills
+    ckb_skills = [
+        entity["name"]
+        for entity in auth_store.career_entities.get(user_id, {}).get("skills", {}).values()
+        if entity.get("confirmed_by_user", True)
+    ]
+    raw_user_skills = list(profile.skills) + ckb_skills + list(profile.preferred_skills.keys())
+    user_skills_set = {normalize_skill(s) for s in raw_user_skills if s.strip()}
+
     matching_jobs = 0
     gaps: Counter[str] = Counter()
     for job in jobs:
-        required = {skill.casefold(): skill for skill in job.required_skills}
-        if required and profile_skills.intersection(required):
+        intel = analyze_job(user_id, job)
+        if intel.fit_score >= 50 or bool(intel.matched_required_skills):
             matching_jobs += 1
-        for normalized, display_name in required.items():
-            if normalized not in profile_skills:
-                gaps[display_name] += 1
+        for missing_s in intel.missing_required_skills:
+            if normalize_skill(missing_s) not in user_skills_set:
+                gaps[missing_s] += 1
 
     return UserAnalytics(
         jobs_discovered=len(jobs),

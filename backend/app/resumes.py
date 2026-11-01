@@ -55,26 +55,35 @@ def generate_resume(user_id: str, job: Job) -> ResumeContent:
         )
     )
     if intelligence.relevant_projects:
-        projects = [
-            ResumeItem(
-                text=f"{project.name}: {project.description}".strip(": "),
-                source_entity_ids=[project.id],
+        projects = []
+        for project in intelligence.relevant_projects:
+            tech_str = f" [{', '.join(project.technologies)}]" if getattr(project, "technologies", None) else ""
+            desc = f": {project.description}" if project.description else ""
+            projects.append(
+                ResumeItem(
+                    text=f"{project.name}{tech_str}{desc}".strip(": "),
+                    source_entity_ids=[project.id],
+                )
             )
-            for project in intelligence.relevant_projects
-        ]
     else:
         # Fall back to user's confirmed projects from Career Knowledge Base
-        projects = [
-            ResumeItem(
-                text=f"{item.get('name', '')}: {item.get('description', '')}".strip(": "),
-                source_entity_ids=[item["id"]],
+        projects = []
+        for item in _confirmed_entities(user_id, "projects"):
+            techs = item.get("technologies") or []
+            tech_str = f" [{', '.join(techs)}]" if techs else ""
+            desc = f": {item.get('description', '')}" if item.get("description") else ""
+            projects.append(
+                ResumeItem(
+                    text=f"{item.get('name', '')}{tech_str}{desc}".strip(": "),
+                    source_entity_ids=[item["id"]],
+                )
             )
-            for item in _confirmed_entities(user_id, "projects")
-        ]
     experience = [
         ResumeItem(
             text=(
-                f"{item.get('title', '')} at {item.get('company', '')}: {item.get('description', '')}"
+                f"{item.get('title', '')} at {item.get('company', '')}"
+                + (f" ({item['dates']})" if item.get("dates") else "")
+                + (f": {item['description']}" if item.get("description") else "")
             ).strip(" :"),
             source_entity_ids=[item["id"]],
         )
@@ -95,8 +104,9 @@ def generate_resume(user_id: str, job: Job) -> ResumeContent:
         ResumeItem(
             text=(
                 f"{item.get('name', '')}"
-                + (f" ({item['issuer']})" if item.get("issuer") else "")
-            ).strip(" ()"),
+                + (f" - {item['issuer']}" if item.get("issuer") else "")
+                + (f" ({item['issued_date']})" if item.get("issued_date") else "")
+            ).strip(" -()"),
             source_entity_ids=[item["id"]],
         )
         for item in _confirmed_entities(user_id, "certifications")
@@ -109,6 +119,14 @@ def generate_resume(user_id: str, job: Job) -> ResumeContent:
         projects=projects,
         education=education,
         certifications=certifications,
+        section_order=[
+            "summary",
+            "skills",
+            "experience",
+            "projects",
+            "education",
+            "certifications",
+        ],
     )
 
 
@@ -141,16 +159,29 @@ def render_latex(content: ResumeContent) -> str:
     lines = [
         r"\documentclass[11pt]{article}",
         r"\begin{document}",
-        f"\\section*{{{escape(content.summary)}}}",
     ]
-    sections = (
-        ("Skills", [ResumeItem(text=skill) for skill in content.skills]),
-        ("Experience", content.experience),
-        ("Projects", content.projects),
-        ("Education", content.education),
-        ("Certifications", content.certifications),
-    )
-    for title, items in sections:
+    if content.summary:
+        lines.append(f"\\section*{{{escape(content.summary)}}}")
+
+    section_map = {
+        "skills": ("Skills", [ResumeItem(text=skill) for skill in content.skills]),
+        "experience": ("Experience", content.experience),
+        "projects": ("Projects", content.projects),
+        "education": ("Education", content.education),
+        "certifications": ("Certifications", content.certifications),
+    }
+
+    order = [
+        s.lower()
+        for s in (content.section_order or [])
+        if s.lower() in section_map
+    ]
+    for key in ("skills", "experience", "projects", "education", "certifications"):
+        if key not in order:
+            order.append(key)
+
+    for key in order:
+        title, items = section_map[key]
         if not items:
             continue
         lines.extend([f"\\section*{{{title}}}", r"\begin{itemize}"])

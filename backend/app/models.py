@@ -409,6 +409,7 @@ class ResumeContent(BaseModel):
     projects: list[ResumeItem] = Field(default_factory=list)
     education: list[ResumeItem] = Field(default_factory=list)
     certifications: list[ResumeItem] = Field(default_factory=list)
+    section_order: list[str] = Field(default_factory=list)
 
 
 class ResumeVersion(BaseModel):
@@ -439,6 +440,7 @@ class ResumeExport(BaseModel):
 class ResumeUpdate(BaseModel):
     content: ResumeContent
     status: str | None = Field(default=None, pattern="^(draft|approved)$")
+    template: str | None = None
 
 
 class RecommendationFeedback(BaseModel):

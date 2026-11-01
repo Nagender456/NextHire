@@ -346,11 +346,19 @@ export function listResumes() {
   return request("/api/v1/resumes");
 }
 
-export function updateResume(resumeId, content, status) {
+export function updateResume(resumeId, content, status, template) {
   return request(`/api/v1/resumes/${resumeId}`, {
     method: "PATCH",
-    body: JSON.stringify({ content, ...(status ? { status } : {}) }),
+    body: JSON.stringify({
+      content,
+      ...(status ? { status } : {}),
+      ...(template ? { template } : {}),
+    }),
   });
+}
+
+export function listResumeTemplates() {
+  return request("/api/v1/resume-templates");
 }
 
 export function exportResumeLatex(resumeId) {
