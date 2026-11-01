@@ -7,6 +7,8 @@ from typing import Any
 from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
+import httpx
+
 try:
     import pypdf
 except ImportError:
@@ -23,6 +25,15 @@ ALLOWED_DOCUMENTS = {
 }
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 MAX_EXTRACTED_TEXT = 1_000_000
+
+
+def _clean_json_markdown(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    return cleaned.strip()
+
 
 # Comprehensive technical skills taxonomy
 SKILLS_TAXONOMY: dict[str, list[str]] = {
@@ -172,84 +183,122 @@ def _extract_with_gemini(text: str) -> tuple[list[dict[str, object]] | None, str
     if not api_key:
         logger.warning("No GEMINI_API_KEY configured for resume extraction.")
         return None, ""
+
+    prompt = (
+        "You are an expert AI resume parser and talent intelligence specialist. "
+        "Analyze the candidate's resume text and extract all career facts into structured JSON.\n\n"
+        "Format the output strictly as valid JSON with these keys:\n"
+        "{\n"
+        '  "headline": "Professional Role/Title | Core Specialization",\n'
+        '  "summary": "Concise 2-3 sentence career summary",\n'
+        '  "skills": [\n'
+        '    {"name": "Skill Name", "category": "Languages|Frontend|Backend|Cloud|Databases|Architecture|AI|Other", "confidence": 0.95}\n'
+        "  ],\n"
+        '  "experience": [\n'
+        '    {\n'
+        '      "company": "Company Name",\n'
+        '      "title": "Job Title",\n'
+        '      "dates": "Start - End Date or Present",\n'
+        '      "description": "Responsibilities and key accomplishments",\n'
+        '      "confidence": 0.92\n'
+        "    }\n"
+        "  ],\n"
+        '  "projects": [\n'
+        '    {\n'
+        '      "name": "Project Name",\n'
+        '      "description": "Project overview and impact",\n'
+        '      "tech_stack": ["Tech1", "Tech2"],\n'
+        '      "confidence": 0.90\n'
+        "    }\n"
+        "  ],\n"
+        '  "education": [\n'
+        '    {\n'
+        '      "institution": "University/College Name",\n'
+        '      "degree": "Degree and Major",\n'
+        '      "year": "Graduation Year",\n'
+        '      "confidence": 0.95\n'
+        "    }\n"
+        "  ],\n"
+        '  "certifications": [\n'
+        '    {"name": "Certification Name", "issuer": "Issuing Org", "confidence": 0.90}\n'
+        "  ],\n"
+        '  "achievements": [\n'
+        '    {"title": "Award or Achievement", "description": "Details", "confidence": 0.90}\n'
+        "  ]\n"
+        "}\n\n"
+        f"Resume Text:\n{text[:15000]}"
+    )
+
+    candidate_models = (
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+    )
+
+    # 1. Primary REST call via httpx (universal, robust, direct HTTP with JSON response config)
+    for model_candidate in candidate_models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"responseMimeType": "application/json"},
+            }
+            with httpx.Client(timeout=25.0) as client:
+                resp = client.post(url, json=payload)
+                if resp.status_code == 200:
+                    body = resp.json()
+                    candidates = body.get("candidates", [])
+                    if candidates:
+                        raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        clean = _clean_json_markdown(raw_text)
+                        data = json.loads(clean)
+                        results = _format_ai_extracted_data(data)
+                        if results:
+                            logger.info(
+                                "Successfully parsed resume via Gemini REST API '%s' (%d entities extracted)",
+                                model_candidate,
+                                len(results),
+                            )
+                            return results, f"Gemini AI ({model_candidate})"
+                else:
+                    logger.warning("Gemini REST model %s returned status %d", model_candidate, resp.status_code)
+        except Exception as e:
+            logger.warning("Gemini REST model %s error: %s", model_candidate, e)
+            continue
+
+    # 2. Secondary fallback via google-genai SDK if available
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
-        prompt = (
-            "You are an expert AI resume parser and talent intelligence specialist. "
-            "Analyze the candidate's resume text and extract all career facts into structured JSON.\n\n"
-            "Format the output strictly as valid JSON with these keys:\n"
-            "{\n"
-            '  "headline": "Professional Role/Title | Core Specialization",\n'
-            '  "summary": "Concise 2-3 sentence career summary",\n'
-            '  "skills": [\n'
-            '    {"name": "Skill Name", "category": "Languages|Frontend|Backend|Cloud|Databases|Architecture|AI|Other", "confidence": 0.95}\n'
-            "  ],\n"
-            '  "experience": [\n'
-            '    {\n'
-            '      "company": "Company Name",\n'
-            '      "title": "Job Title",\n'
-            '      "dates": "Start - End Date or Present",\n'
-            '      "description": "Responsibilities and key accomplishments",\n'
-            '      "confidence": 0.92\n'
-            "    }\n"
-            "  ],\n"
-            '  "projects": [\n'
-            '    {\n'
-            '      "name": "Project Name",\n'
-            '      "description": "Project overview and impact",\n'
-            '      "tech_stack": ["Tech1", "Tech2"],\n'
-            '      "confidence": 0.90\n'
-            "    }\n"
-            "  ],\n"
-            '  "education": [\n'
-            '    {\n'
-            '      "institution": "University/College Name",\n'
-            '      "degree": "Degree and Major",\n'
-            '      "year": "Graduation Year",\n'
-            '      "confidence": 0.95\n'
-            "    }\n"
-            "  ],\n"
-            '  "certifications": [\n'
-            '    {"name": "Certification Name", "issuer": "Issuing Org", "confidence": 0.90}\n'
-            "  ],\n"
-            '  "achievements": [\n'
-            '    {"title": "Award or Achievement", "description": "Details", "confidence": 0.90}\n'
-            "  ]\n"
-            "}\n\n"
-            f"Resume Text:\n{text[:15000]}"
-        )
-        for model_candidate in (
-            "gemini-2.5-flash-lite",
-            "gemini-flash-lite-latest",
-            "gemini-3.1-flash-lite",
-            "gemini-3.5-flash-lite",
-            "gemini-2.5-flash",
-            "gemini-flash-latest",
-        ):
+        for model_candidate in candidate_models:
             try:
                 resp = client.models.generate_content(
                     model=model_candidate,
                     contents=prompt,
-                    config={"response_mime_type": "application/json"}
+                    config={"response_mime_type": "application/json"},
                 )
                 if resp and resp.text:
-                    data = json.loads(resp.text)
+                    clean = _clean_json_markdown(resp.text)
+                    data = json.loads(clean)
                     results = _format_ai_extracted_data(data)
-                    logger.info(
-                        "Successfully parsed resume using Gemini AI model '%s' (%d entities extracted)",
-                        model_candidate,
-                        len(results),
-                    )
-                    return results, f"Gemini AI ({model_candidate})"
-            except Exception as e:
-                logger.warning("Gemini model %s failed: %s (trying next candidate)", model_candidate, e)
+                    if results:
+                        logger.info(
+                            "Successfully parsed resume using Gemini SDK model '%s' (%d entities extracted)",
+                            model_candidate,
+                            len(results),
+                        )
+                        return results, f"Gemini AI ({model_candidate})"
+            except Exception:
                 continue
-        logger.warning("All Gemini model candidates exhausted or failed.")
-        return None, ""
     except Exception as exc:
-        logger.warning("Gemini resume parser fallback: %s", exc)
-        return None, ""
+        logger.warning("Gemini SDK resume parser fallback: %s", exc)
+
+    logger.warning("All Gemini model candidates exhausted or failed.")
+    return None, ""
 
 
 def _format_ai_extracted_data(data: dict[str, Any]) -> list[dict[str, object]]:

@@ -184,26 +184,54 @@ def ai_verify_job_opening(
         or os.environ.get("GOOGLE_API_KEY")
     )
     if api_key:
+        prompt = (
+            f"Classify whether this URL represents an individual open job vacancy/posting that a candidate can apply for, "
+            f"or if it is a general article, culture guide, blog post, or navigation page.\n\n"
+            f"Company: {company_name}\n"
+            f"URL: {url}\n"
+            f"Title: {title}\n"
+            f"Snippet: {snippet[:400]}\n\n"
+            f"Output valid JSON ONLY: {{\"is_job_opening\": true/false, \"clean_title\": \"...\", \"reason\": \"...\"}}"
+        )
+        candidate_models = (
+            "gemini-flash-lite-latest",
+            "gemini-3.5-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.6-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-flash-latest",
+        )
+        # Direct httpx REST call
+        import httpx
+        for model_candidate in candidate_models:
+            try:
+                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"responseMimeType": "application/json"}
+                }
+                with httpx.Client(timeout=15.0) as client:
+                    resp = client.post(g_url, json=payload)
+                    if resp.status_code == 200:
+                        raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                        clean = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+                        clean = re.sub(r"\s*```$", "", clean).strip()
+                        data = json.loads(clean)
+                        if "is_job_opening" in data:
+                            return (
+                                bool(data["is_job_opening"]),
+                                str(data.get("clean_title", title)).strip(),
+                                str(data.get("reason", "")),
+                            )
+            except Exception:
+                continue
+
+        # Fallback to genai SDK if installed
         try:
             from google import genai
             client = genai.Client(api_key=api_key)
-            prompt = (
-                f"Classify whether this URL represents an individual open job vacancy/posting that a candidate can apply for, "
-                f"or if it is a general article, culture guide, blog post, or navigation page.\n\n"
-                f"Company: {company_name}\n"
-                f"URL: {url}\n"
-                f"Title: {title}\n"
-                f"Snippet: {snippet[:400]}\n\n"
-                f"Output valid JSON ONLY: {{\"is_job_opening\": true/false, \"clean_title\": \"...\", \"reason\": \"...\"}}"
-            )
-            for model_candidate in (
-                "gemini-2.5-flash-lite",
-                "gemini-flash-lite-latest",
-                "gemini-3.1-flash-lite",
-                "gemini-3.5-flash-lite",
-                "gemini-2.5-flash",
-                "gemini-flash-latest",
-            ):
+            for model_candidate in candidate_models:
                 try:
                     resp = client.models.generate_content(
                         model=model_candidate,
@@ -211,7 +239,9 @@ def ai_verify_job_opening(
                         config={"response_mime_type": "application/json"}
                     )
                     if resp and resp.text:
-                        data = json.loads(resp.text)
+                        clean = re.sub(r"^```(?:json)?\s*", "", resp.text.strip())
+                        clean = re.sub(r"\s*```$", "", clean).strip()
+                        data = json.loads(clean)
                         if "is_job_opening" in data:
                             return (
                                 bool(data["is_job_opening"]),
