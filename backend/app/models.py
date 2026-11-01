@@ -298,6 +298,7 @@ class Company(BaseModel):
     active: bool = True
     verification_status: str = "verified"
     source_adapter: str = "naukri"
+    requested_by_user_id: str | None = None
     career_url_verified_at: datetime | None = None
     last_synced_at: datetime | None = None
     last_sync_status: str | None = None
@@ -596,6 +597,7 @@ class AdminOverview(BaseModel):
     users: int = Field(ge=0)
     companies: int = Field(ge=0)
     active_companies: int = Field(ge=0)
+    pending_companies: int = Field(default=0, ge=0)
     jobs: int = Field(ge=0)
     open_jobs: int = Field(ge=0)
     crawls: int = Field(ge=0)

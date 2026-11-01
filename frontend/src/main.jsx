@@ -40,6 +40,8 @@ import {
   listCareerDocuments,
   uploadCareerDocument,
   deleteCompany,
+  approveCompany,
+  rejectCompany,
   resetPrototypeCompanies,
   refreshAllCompanies,
   getSchedulerStatus,
@@ -2495,7 +2497,13 @@ function ProfileEditor({ user, onUpdated }) {
         <label>Preferred roles<input type="text" value={roles} onChange={(event) => setRoles(event.target.value)} placeholder="Backend Engineer, Python Developer" /></label>
         <label>Preferred skills<input type="text" value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="Python: HIGH, FastAPI: HIGH, AWS: MEDIUM" /></label>
         <label>Preferred locations<input type="text" value={preferredLocations} onChange={(event) => setPreferredLocations(event.target.value)} placeholder="Remote, Berlin" /></label>
-        <label>Target companies<input type="text" value={companies} onChange={(event) => setCompanies(event.target.value)} placeholder="Companies you want to join" /></label>
+        <label>
+          Target companies
+          <input type="text" value={companies} onChange={(event) => setCompanies(event.target.value)} placeholder="e.g. Google, Stripe, Spotify, Infosys" />
+          <span className="field-hint" style={{ marginTop: "4px" }}>
+            New target companies are submitted to the admin whitelist queue for approval and automatic Naukri job scraping.
+          </span>
+        </label>
         <button className="primary-button" type="submit">Save profile</button>
         {saved && <p className="success-message" role="status">Profile saved.</p>}
       </form>
@@ -4577,6 +4585,9 @@ function AdminPage() {
   const [naukriLocation, setNaukriLocation] = useState("Bengaluru, India");
   const [naukriLimit, setNaukriLimit] = useState(20);
   const [scrapingNaukri, setScrapingNaukri] = useState(false);
+  const [approvingId, setApprovingId] = useState("");
+  const [rejectingId, setRejectingId] = useState("");
+  const [whitelistFilter, setWhitelistFilter] = useState("all");
   const COMPANIES_PER_PAGE = 20;
 
   const handleNaukriScrape = (event) => {
@@ -4595,16 +4606,27 @@ function AdminPage() {
       .finally(() => setScrapingNaukri(false));
   };
 
+  const pendingCompanies = useMemo(
+    () => companies.filter((c) => c.verification_status === "pending"),
+    [companies]
+  );
+
   const filteredCompanies = useMemo(() => {
+    let list = companies;
+    if (whitelistFilter === "pending") {
+      list = list.filter((c) => c.verification_status === "pending");
+    } else if (whitelistFilter === "verified") {
+      list = list.filter((c) => c.verification_status !== "pending");
+    }
     const q = companySearch.trim().toLowerCase();
-    if (!q) return companies;
-    return companies.filter(
+    if (!q) return list;
+    return list.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         (c.career_page_url && c.career_page_url.toLowerCase().includes(q)) ||
         (c.website && c.website.toLowerCase().includes(q))
     );
-  }, [companies, companySearch]);
+  }, [companies, companySearch, whitelistFilter]);
 
   const totalCompanyPages = Math.ceil(filteredCompanies.length / COMPANIES_PER_PAGE) || 1;
   const paginatedCompanies = useMemo(() => {
@@ -4700,6 +4722,29 @@ function AdminPage() {
         showNotice(`Deleted ${company.name}.`);
       })
       .catch((err) => showNotice(err.message, "error"));
+  };
+
+  const handleApproveCompany = (company) => {
+    setApprovingId(company.id);
+    approveCompany(company.id)
+      .then((crawl) => {
+        loadAll();
+        showNotice(`Whitelisted ${company.name}! Ingested ${crawl.jobs_found} live roles from Naukri.`);
+      })
+      .catch((err) => showNotice(err.message || "Failed to whitelist company", "error"))
+      .finally(() => setApprovingId(""));
+  };
+
+  const handleRejectCompany = (company) => {
+    if (!window.confirm(`Reject whitelist request for ${company.name}?`)) return;
+    setRejectingId(company.id);
+    rejectCompany(company.id)
+      .then(() => {
+        loadAll();
+        showNotice(`Rejected and removed ${company.name}.`);
+      })
+      .catch((err) => showNotice(err.message || "Failed to reject company", "error"))
+      .finally(() => setRejectingId(""));
   };
 
   const handleStartEdit = (company) => {
@@ -4882,6 +4927,26 @@ function AdminPage() {
           <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
             Target career websites and portals monitored.
           </p>
+          {overview.pending_companies > 0 && (
+            <div style={{ marginTop: "8px" }}>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  background: "rgba(234, 88, 12, 0.12)",
+                  color: "#ea580c",
+                }}
+              >
+                <AlertCircle size={11} />
+                {overview.pending_companies} pending whitelist
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="overview-metric-card">
@@ -4932,6 +4997,159 @@ function AdminPage() {
           </p>
         </div>
       </div>
+
+      {/* Candidate Target Company Whitelist Queue */}
+      {pendingCompanies.length > 0 && (
+        <section
+          className="linear-widget-panel"
+          style={{
+            border: "1px solid rgba(234, 88, 12, 0.35)",
+            background: "linear-gradient(135deg, rgba(234, 88, 12, 0.05), rgba(245, 158, 11, 0.02))",
+          }}
+        >
+          <div className="widget-header" style={{ flexWrap: "wrap", gap: "10px", marginBottom: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "50%",
+                  background: "rgba(234, 88, 12, 0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#ea580c",
+                }}
+              >
+                <ShieldCheck size={16} />
+              </div>
+              <div>
+                <h2 className="widget-title" style={{ margin: 0 }}>
+                  Candidate Whitelist Queue ({pendingCompanies.length})
+                </h2>
+                <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
+                  Companies added by candidates in their profile awaiting admin whitelist approval
+                </span>
+              </div>
+            </div>
+            <span
+              className="badge-tag-orange"
+              style={{
+                fontSize: "11px",
+                fontWeight: 700,
+                background: "rgba(234, 88, 12, 0.15)",
+                color: "#ea580c",
+                padding: "3px 8px",
+                borderRadius: "4px",
+              }}
+            >
+              Action Required
+            </span>
+          </div>
+
+          <p style={{ color: "var(--colors-slate)", fontSize: "13px", marginBottom: "1rem" }}>
+            Approving a company will verify it in NextHire and immediately trigger JobSpy to scrape 10–12 verified open roles from Naukri.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {pendingCompanies.map((c) => {
+              const isApproving = approvingId === c.id;
+              const isRejecting = rejectingId === c.id;
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    background: "var(--colors-surface-card)",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(234, 88, 12, 0.25)",
+                    flexWrap: "wrap",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div
+                      style={{
+                        width: "34px",
+                        height: "34px",
+                        borderRadius: "6px",
+                        background: "#ea580c",
+                        color: "#fff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 700,
+                        fontSize: "13px",
+                      }}
+                    >
+                      {c.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <strong style={{ fontSize: "14px", color: "var(--colors-ink)" }}>{c.name}</strong>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            background: "rgba(234, 88, 12, 0.12)",
+                            color: "#ea580c",
+                          }}
+                        >
+                          Candidate Requested
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
+                        {c.website || c.career_page_url || "Direct candidate target submission"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <button
+                      className="primary-button"
+                      onClick={() => handleApproveCompany(c)}
+                      disabled={isApproving || isRejecting}
+                      style={{
+                        fontSize: "12px",
+                        padding: "6px 14px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#16a34a",
+                        borderColor: "#16a34a",
+                      }}
+                    >
+                      <Check size={13} className={isApproving ? "spin" : ""} />
+                      <span>{isApproving ? "Approving & Scraping..." : "Approve & Scrape Naukri"}</span>
+                    </button>
+                    <button
+                      className="button-secondary"
+                      onClick={() => handleRejectCompany(c)}
+                      disabled={isApproving || isRejecting}
+                      style={{
+                        fontSize: "12px",
+                        padding: "6px 12px",
+                        color: "#dc2626",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <X size={13} />
+                      <span>{isRejecting ? "Rejecting..." : "Reject"}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Add Company Card */}
       <section className="linear-widget-panel">
@@ -5033,6 +5251,58 @@ function AdminPage() {
           These companies are indexed periodically. Click "Scrape Now" to immediately fetch open listings from their careers page.
         </p>
 
+        {/* Whitelist Filter Tabs */}
+        <div style={{ display: "flex", gap: "8px", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className={whitelistFilter === "all" ? "primary-button" : "button-secondary"}
+            onClick={() => { setWhitelistFilter("all"); setCompanyPage(1); }}
+            style={{ fontSize: "12px", padding: "5px 12px", height: "30px" }}
+          >
+            All Companies ({companies.length})
+          </button>
+          <button
+            type="button"
+            className={whitelistFilter === "verified" ? "primary-button" : "button-secondary"}
+            onClick={() => { setWhitelistFilter("verified"); setCompanyPage(1); }}
+            style={{ fontSize: "12px", padding: "5px 12px", height: "30px" }}
+          >
+            Whitelisted ({companies.filter(c => c.verification_status !== "pending").length})
+          </button>
+          <button
+            type="button"
+            className={whitelistFilter === "pending" ? "primary-button" : "button-secondary"}
+            onClick={() => { setWhitelistFilter("pending"); setCompanyPage(1); }}
+            style={{
+              fontSize: "12px",
+              padding: "5px 12px",
+              height: "30px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px",
+              background: whitelistFilter === "pending" ? "#ea580c" : undefined,
+              borderColor: whitelistFilter === "pending" ? "#ea580c" : undefined,
+              color: whitelistFilter === "pending" ? "#fff" : undefined,
+            }}
+          >
+            <span>Pending Whitelist</span>
+            {pendingCompanies.length > 0 && (
+              <span
+                style={{
+                  background: whitelistFilter === "pending" ? "rgba(255,255,255,0.3)" : "rgba(234,88,12,0.15)",
+                  color: whitelistFilter === "pending" ? "#fff" : "#ea580c",
+                  borderRadius: "10px",
+                  padding: "1px 6px",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                }}
+              >
+                {pendingCompanies.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         {/* Company Search & Filter Bar */}
         <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap" }}>
           <div style={{ position: "relative", flex: 1, minWidth: "260px" }}>
@@ -5073,6 +5343,7 @@ function AdminPage() {
           ) : (
             paginatedCompanies.map((company) => {
               const isScraping = scrapingId === company.id;
+              const isPending = company.verification_status === "pending";
               return (
                 <div
                   key={company.id}
@@ -5083,32 +5354,47 @@ function AdminPage() {
                     padding: "12px 16px",
                     background: "var(--colors-surface-soft)",
                     borderRadius: "8px",
-                    border: "1px solid var(--colors-hairline)",
+                    border: isPending ? "1px solid rgba(234, 88, 12, 0.3)" : "1px solid var(--colors-hairline)",
                     flexWrap: "wrap",
                     gap: "10px",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "220px", flex: 1 }}>
-                    <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: "var(--colors-primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>
+                    <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: isPending ? "#ea580c" : "var(--colors-primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>
                       {company.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div style={{ overflow: "hidden" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <strong style={{ fontSize: "14px", color: "var(--colors-ink)" }}>{company.name}</strong>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 600,
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            background: company.active ? "rgba(26, 174, 57, 0.12)" : "rgba(120, 118, 113, 0.12)",
-                            color: company.active ? "var(--colors-semantic-success)" : "var(--colors-steel)",
-                          }}
-                        >
-                          {company.active ? "Active" : "Paused"}
-                        </span>
+                        {isPending ? (
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              background: "rgba(234, 88, 12, 0.12)",
+                              color: "#ea580c",
+                            }}
+                          >
+                            Pending Whitelist
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              background: company.active ? "rgba(26, 174, 57, 0.12)" : "rgba(120, 118, 113, 0.12)",
+                              color: company.active ? "var(--colors-semantic-success)" : "var(--colors-steel)",
+                            }}
+                          >
+                            {company.active ? "Active" : "Paused"}
+                          </span>
+                        )}
                       </div>
-                      {company.career_page_url && (
+                      {company.career_page_url ? (
                         <a
                           href={company.career_page_url}
                           target="_blank"
@@ -5118,60 +5404,95 @@ function AdminPage() {
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{company.career_page_url}</span>
                           <ExternalLink size={10} style={{ flexShrink: 0 }} />
                         </a>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>Candidate Submitted Target</span>
                       )}
                     </div>
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                    {company.last_sync_status && (
-                      <span
-                        style={{
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          padding: "3px 8px",
-                          borderRadius: "4px",
-                          background: company.last_sync_status === "succeeded" ? "rgba(26, 174, 57, 0.1)" : "rgba(221, 91, 0, 0.1)",
-                          color: company.last_sync_status === "succeeded" ? "var(--colors-semantic-success)" : "var(--colors-brand-orange)",
-                        }}
-                      >
-                        {company.last_sync_status === "succeeded" ? "Last Scrape: OK" : "Last Scrape: Failed"}
-                      </span>
+                    {isPending ? (
+                      <>
+                        <button
+                          className="primary-button"
+                          onClick={() => handleApproveCompany(company)}
+                          disabled={approvingId === company.id || rejectingId === company.id}
+                          style={{
+                            fontSize: "12px",
+                            padding: "6px 14px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            background: "#16a34a",
+                            borderColor: "#16a34a",
+                          }}
+                        >
+                          <Check size={12} className={approvingId === company.id ? "spin" : ""} />
+                          <span>{approvingId === company.id ? "Approving..." : "Approve & Scrape Naukri"}</span>
+                        </button>
+                        <button
+                          className="button-secondary"
+                          onClick={() => handleRejectCompany(company)}
+                          disabled={approvingId === company.id || rejectingId === company.id}
+                          style={{ fontSize: "12px", padding: "6px 10px", color: "#dc2626" }}
+                        >
+                          <X size={12} />
+                          <span>{rejectingId === company.id ? "Rejecting..." : "Reject"}</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {company.last_sync_status && (
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              padding: "3px 8px",
+                              borderRadius: "4px",
+                              background: company.last_sync_status === "succeeded" ? "rgba(26, 174, 57, 0.1)" : "rgba(221, 91, 0, 0.1)",
+                              color: company.last_sync_status === "succeeded" ? "var(--colors-semantic-success)" : "var(--colors-brand-orange)",
+                            }}
+                          >
+                            {company.last_sync_status === "succeeded" ? "Last Scrape: OK" : "Last Scrape: Failed"}
+                          </span>
+                        )}
+
+                        <button
+                          className="primary-button"
+                          onClick={() => handleScrapeCompany(company.id, company.name)}
+                          disabled={isScraping}
+                          style={{ fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                        >
+                          <RefreshCw size={12} className={isScraping ? "spin" : ""} />
+                          <span>{isScraping ? "Scraping Naukri..." : "Scrape Naukri"}</span>
+                        </button>
+
+                        <button
+                          className="button-secondary"
+                          onClick={() => handleToggleActive(company)}
+                          style={{ fontSize: "12px", padding: "6px 10px" }}
+                        >
+                          {company.active ? "Pause" : "Resume"}
+                        </button>
+
+                        <button
+                          className="button-link"
+                          onClick={() => handleStartEdit(company)}
+                          style={{ fontSize: "12px" }}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          className="button-link"
+                          onClick={() => handleDeleteCompany(company)}
+                          style={{ fontSize: "12px", color: "#ef4444" }}
+                          title="Delete company"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
                     )}
-
-                    <button
-                      className="primary-button"
-                      onClick={() => handleScrapeCompany(company.id, company.name)}
-                      disabled={isScraping}
-                      style={{ fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                    >
-                      <RefreshCw size={12} className={isScraping ? "spin" : ""} />
-                      <span>{isScraping ? "Scraping Naukri..." : "Scrape Naukri"}</span>
-                    </button>
-
-                    <button
-                      className="button-secondary"
-                      onClick={() => handleToggleActive(company)}
-                      style={{ fontSize: "12px", padding: "6px 10px" }}
-                    >
-                      {company.active ? "Pause" : "Resume"}
-                    </button>
-
-                    <button
-                      className="button-link"
-                      onClick={() => handleStartEdit(company)}
-                      style={{ fontSize: "12px" }}
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      className="button-link"
-                      onClick={() => handleDeleteCompany(company)}
-                      style={{ fontSize: "12px", color: "#ef4444" }}
-                      title="Delete company"
-                    >
-                      <Trash2 size={13} />
-                    </button>
                   </div>
                 </div>
               );

@@ -57,6 +57,10 @@ def get_admin_overview() -> AdminOverview:
         active_companies=sum(
             company.active for company in ingestion_store.companies.values()
         ),
+        pending_companies=sum(
+            company.verification_status == "pending"
+            for company in ingestion_store.companies.values()
+        ),
         jobs=len(jobs),
         open_jobs=sum(job.status == "open" for job in jobs),
         crawls=len(crawls),

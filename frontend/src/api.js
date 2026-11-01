@@ -415,3 +415,15 @@ export function dismissJob(jobId) {
   });
 }
 
+export function approveCompany(companyId) {
+  return request(`/api/v1/admin/companies/${companyId}/approve`, {
+    method: "POST",
+  });
+}
+
+export function rejectCompany(companyId) {
+  return request(`/api/v1/admin/companies/${companyId}/reject`, {
+    method: "POST",
+  });
+}
+

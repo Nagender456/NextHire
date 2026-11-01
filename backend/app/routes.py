@@ -246,7 +246,30 @@ async def get_profile(user: User = Depends(require_user)) -> CareerProfile:
 async def update_profile(
     changes: ProfileUpdate, user: User = Depends(require_user)
 ) -> CareerProfile:
-    return auth_store.update_profile(user.id, changes)
+    updated = auth_store.update_profile(user.id, changes)
+    if changes.target_companies:
+        for comp_name in changes.target_companies:
+            name_clean = comp_name.strip()
+            if not name_clean:
+                continue
+            exists = any(
+                c.name.lower() == name_clean.lower()
+                for c in ingestion_store.companies.values()
+            )
+            if not exists:
+                ingestion_store.add_company(
+                    CompanyCreate(name=name_clean),
+                    verified=False,
+                    requested_by=user.id,
+                )
+                admin_store.activity("company_whitelist_requested")
+                admin_store.audit(
+                    user.id,
+                    "company_whitelist_requested",
+                    "company",
+                    name_clean,
+                )
+    return updated
 
 
 @router.get("/career/skills", response_model=list[Skill])
@@ -1270,6 +1293,56 @@ async def refresh_company(
         {"status": result.status},
     )
     return result
+
+
+@router.post("/admin/companies/{company_id}/approve", response_model=CrawlResult)
+async def approve_company(
+    company_id: str, admin: User = Depends(require_admin)
+) -> CrawlResult:
+    company = ingestion_store.companies.get(company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail={"code": "COMPANY_NOT_FOUND"})
+
+    updated = company.model_copy(
+        update={
+            "verification_status": "verified",
+            "active": True,
+            "career_url_verified_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+    ingestion_store.companies[company_id] = updated
+    if ingestion_store._mongo_db is not None:
+        try:
+            ingestion_store._mongo_db.ingested_companies.update_one(
+                {"id": company_id},
+                {"$set": updated.model_dump(mode="json")},
+                upsert=True,
+            )
+        except Exception:
+            pass
+
+    crawl = await asyncio.to_thread(ingestion_store.refresh, company_id)
+    admin_store.activity("company_whitelisted")
+    admin_store.audit(
+        admin.id,
+        "company_whitelisted",
+        "company",
+        company_id,
+        {"name": company.name, "jobs_found": str(crawl.jobs_found)},
+    )
+    return crawl
+
+
+@router.post("/admin/companies/{company_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+async def reject_company(
+    company_id: str, admin: User = Depends(require_admin)
+) -> Response:
+    deleted = ingestion_store.delete_company(company_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail={"code": "COMPANY_NOT_FOUND"})
+    admin_store.audit(admin.id, "company_whitelist_rejected", "company", company_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/admin/companies/{company_id}/crawls", response_model=list[CrawlResult])

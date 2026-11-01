@@ -881,7 +881,12 @@ class JobIngestionStore:
     def _seed_default_companies(self) -> None:
         self.reset_prototype_companies()
 
-    def add_company(self, payload: CompanyCreate, verified: bool = True) -> Company:
+    def add_company(
+        self,
+        payload: CompanyCreate,
+        verified: bool = True,
+        requested_by: str | None = None,
+    ) -> Company:
         now = datetime.now(UTC)
         slug = re.sub(r"[^a-z0-9]+", "-", payload.name.lower()).strip("-")
         company_id = f"company-{slug or 'custom'}"
@@ -894,6 +899,7 @@ class JobIngestionStore:
             career_page_url=payload.career_page_url or f"https://www.naukri.com/{slug}-jobs",
             verification_status="verified" if verified else "pending",
             source_adapter="naukri",
+            requested_by_user_id=requested_by,
             career_url_verified_at=now if verified else None,
             created_at=now,
             updated_at=now,
