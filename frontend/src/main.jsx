@@ -44,6 +44,7 @@ import {
   approveCompany,
   rejectCompany,
   resetPrototypeCompanies,
+  purgeCareerSiteJobs,
   refreshAllCompanies,
   getSchedulerStatus,
   triggerScheduler,
@@ -6088,14 +6089,15 @@ function AdminPage() {
   const [jobs, setJobs] = useState([]);
   const [crawls, setCrawls] = useState([]);
   const [scheduler, setScheduler] = useState(null);
-  const [companyForm, setCompanyForm] = useState({ name: "", career_page_url: "", website: "" });
+  const [companyForm, setCompanyForm] = useState({ name: "" });
   const [addingCompany, setAddingCompany] = useState(false);
+  const [purgingCareerSiteJobs, setPurgingCareerSiteJobs] = useState(false);
   const [scrapingAll, setScrapingAll] = useState(false);
   const [scrapingId, setScrapingId] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeType, setNoticeType] = useState("success");
   const [editingCompany, setEditingCompany] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", career_page_url: "", website: "" });
+  const [editForm, setEditForm] = useState({ name: "" });
   const [error, setError] = useState(false);
   const [companySearch, setCompanySearch] = useState("");
   const [companyPage, setCompanyPage] = useState(1);
@@ -6108,6 +6110,18 @@ function AdminPage() {
   const [rejectingId, setRejectingId] = useState("");
   const [whitelistFilter, setWhitelistFilter] = useState("all");
   const COMPANIES_PER_PAGE = 20;
+
+  const handlePurgeCareerSiteJobs = () => {
+    if (!window.confirm("Permanently delete all legacy jobs extracted from company career sites from MongoDB? Only verified Naukri jobs will be kept.")) return;
+    setPurgingCareerSiteJobs(true);
+    purgeCareerSiteJobs()
+      .then((res) => {
+        loadAll();
+        showNotice(`Purged ${res.deleted_jobs_count || 0} career-site jobs! Database now retains ${res.remaining_naukri_jobs || 0} verified Naukri roles.`);
+      })
+      .catch((err) => showNotice(err.message || "Failed to purge career-site jobs", "error"))
+      .finally(() => setPurgingCareerSiteJobs(false));
+  };
 
   const handleNaukriScrape = (event) => {
     event.preventDefault();
@@ -6139,12 +6153,7 @@ function AdminPage() {
     }
     const q = companySearch.trim().toLowerCase();
     if (!q) return list;
-    return list.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.career_page_url && c.career_page_url.toLowerCase().includes(q)) ||
-        (c.website && c.website.toLowerCase().includes(q))
-    );
+    return list.filter((c) => c.name.toLowerCase().includes(q));
   }, [companies, companySearch, whitelistFilter]);
 
   const totalCompanyPages = Math.ceil(filteredCompanies.length / COMPANIES_PER_PAGE) || 1;
@@ -6179,17 +6188,17 @@ function AdminPage() {
 
   const submitCompany = (event) => {
     event.preventDefault();
+    if (!companyForm.name.trim()) return;
     setAddingCompany(true);
-    createCompany(companyForm)
+    createCompany({ name: companyForm.name.trim() })
       .then((created) => {
-        setCompanyForm({ name: "", career_page_url: "", website: "" });
-        showNotice(`Added ${created.name}! Crawling career page for live roles...`);
-        // Immediately crawl the newly added company
+        setCompanyForm({ name: "" });
+        showNotice(`Added ${created.name}! Fetching verified live roles from Naukri...`);
         return refreshCompany(created.id);
       })
       .then((crawl) => {
         loadAll();
-        showNotice(`Finished scraping: Found ${crawl.jobs_found} roles (${crawl.jobs_added} added).`);
+        showNotice(`Fetched from Naukri: Found ${crawl.jobs_found} roles (${crawl.jobs_added} added).`);
       })
       .catch((err) => {
         loadAll();
@@ -6204,12 +6213,12 @@ function AdminPage() {
       .then((crawl) => {
         loadAll();
         if (crawl.status === "succeeded") {
-          showNotice(`Scraped ${companyName}: Found ${crawl.jobs_found} roles (${crawl.jobs_added} added, ${crawl.jobs_updated} updated).`);
+          showNotice(`Fetched ${companyName} via Naukri: Found ${crawl.jobs_found} roles (${crawl.jobs_added} added, ${crawl.jobs_updated} updated).`);
         } else {
-          showNotice(`Scrape failed for ${companyName}: ${crawl.error_code || "Unknown error"}`, "error");
+          showNotice(`Naukri fetch failed for ${companyName}: ${crawl.error_code || "Unknown error"}`, "error");
         }
       })
-      .catch((err) => showNotice(err.message || "Scrape failed", "error"))
+      .catch((err) => showNotice(err.message || "Naukri fetch failed", "error"))
       .finally(() => setScrapingId(""));
   };
 
@@ -6218,7 +6227,7 @@ function AdminPage() {
     triggerScheduler()
       .then((res) => {
         loadAll();
-        showNotice(`Scraped all ${res.companies_crawled || companies.length} company career pages successfully!`);
+        showNotice(`Fetched roles from Naukri for all ${res.companies_crawled || companies.length} target companies!`);
       })
       .catch((err) => showNotice(err.message || "Failed to run scheduled scrapers", "error"))
       .finally(() => setScrapingAll(false));
@@ -6228,7 +6237,7 @@ function AdminPage() {
     updateCompany(company.id, { active: !company.active })
       .then(() => {
         loadAll();
-        showNotice(`${company.name} is now ${!company.active ? "active (will be scraped every 12h)" : "paused"}.`);
+        showNotice(`${company.name} is now ${!company.active ? "active (will be scraped periodically)" : "paused"}.`);
       })
       .catch((err) => showNotice(err.message, "error"));
   };
@@ -6270,19 +6279,17 @@ function AdminPage() {
     setEditingCompany(company);
     setEditForm({
       name: company.name,
-      career_page_url: company.career_page_url || "",
-      website: company.website || "",
     });
   };
 
   const handleSaveEdit = (event) => {
     event.preventDefault();
-    if (!editingCompany) return;
-    updateCompany(editingCompany.id, editForm)
+    if (!editingCompany || !editForm.name.trim()) return;
+    updateCompany(editingCompany.id, { name: editForm.name.trim() })
       .then(() => {
         setEditingCompany(null);
         loadAll();
-        showNotice(`Updated ${editForm.name}.`);
+        showNotice(`Updated company to ${editForm.name.trim()}.`);
       })
       .catch((err) => showNotice(err.message, "error"));
   };
@@ -6310,60 +6317,7 @@ function AdminPage() {
         </div>
       )}
 
-      {/* 12-Hour Automated Scraping Banner Card */}
-      <section className="linear-widget-panel" style={{ background: "linear-gradient(135deg, rgba(86, 69, 212, 0.05), rgba(86, 69, 212, 0.01))" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "rgba(86, 69, 212, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--colors-primary)" }}>
-                <Clock size={14} />
-              </div>
-              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--colors-ink)" }}>
-                Automated 12-Hour Career Page Scraper
-              </h2>
-              <span className="badge-tag-purple" style={{ fontSize: "11px", fontWeight: 700 }}>
-                Every 12 Hours (Twice Daily)
-              </span>
-            </div>
-            <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>
-              The background worker automatically crawls registered career pages every 12 hours to discover new open roles and close filled listings.
-            </p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <button
-              className="primary-button"
-              onClick={handleScrapeAll}
-              disabled={scrapingAll}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-            >
-              <RefreshCw size={14} className={scrapingAll ? "spin" : ""} />
-              <span>{scrapingAll ? "Scraping All Pages..." : "Scrape All Now"}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Scheduler Status Row */}
-        <div style={{ display: "flex", gap: "1.5rem", marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--colors-hairline)", flexWrap: "wrap", fontSize: "12.5px" }}>
-          <div>
-            <span style={{ color: "var(--colors-steel)" }}>Status: </span>
-            <strong style={{ color: "var(--colors-semantic-success)", fontWeight: 600 }}>Active (Running)</strong>
-          </div>
-          <div>
-            <span style={{ color: "var(--colors-steel)" }}>Schedule: </span>
-            <strong style={{ color: "var(--colors-ink)" }}>Every 12h (43,200s)</strong>
-          </div>
-          <div>
-            <span style={{ color: "var(--colors-steel)" }}>Active Career Pages: </span>
-            <strong style={{ color: "var(--colors-ink)" }}>{companies.filter((c) => c.active).length} companies</strong>
-          </div>
-          <div>
-            <span style={{ color: "var(--colors-steel)" }}>Total Crawl Runs: </span>
-            <strong style={{ color: "var(--colors-ink)" }}>{crawls.length}</strong>
-          </div>
-        </div>
-      </section>
-
-      {/* JobSpy · Naukri Live Scraper Section */}
+      {/* JobSpy · Naukri Live Job Ingestion Section */}
       <section className="linear-widget-panel" style={{ border: "1px solid rgba(86, 69, 212, 0.2)", background: "linear-gradient(135deg, rgba(86, 69, 212, 0.04), rgba(59, 130, 246, 0.02))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1rem" }}>
           <div>
@@ -6381,6 +6335,35 @@ function AdminPage() {
             <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>
               Extract live, verified postings directly from Naukri with structured skills, verified locations, and official application links.
             </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              className="primary-button"
+              onClick={handleScrapeAll}
+              disabled={scrapingAll}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", padding: "6px 14px" }}
+            >
+              <RefreshCw size={13} className={scrapingAll ? "spin" : ""} />
+              <span>{scrapingAll ? "Fetching Monitored Companies..." : "Fetch All Companies (Naukri)"}</span>
+            </button>
+            <button
+              className="button-secondary"
+              onClick={handlePurgeCareerSiteJobs}
+              disabled={purgingCareerSiteJobs}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "12.5px",
+                padding: "6px 14px",
+                color: "#dc2626",
+                borderColor: "rgba(220, 38, 38, 0.3)",
+              }}
+              title="Delete all legacy jobs extracted from company career sites from MongoDB, retaining only verified Naukri jobs."
+            >
+              <Trash2 size={13} className={purgingCareerSiteJobs ? "spin" : ""} />
+              <span>{purgingCareerSiteJobs ? "Purging Legacy Jobs..." : "Purge Career Site Jobs"}</span>
+            </button>
           </div>
         </div>
 
@@ -6428,6 +6411,26 @@ function AdminPage() {
             <span>{scrapingNaukri ? "Scraping Naukri via JobSpy..." : "Scrape from Naukri"}</span>
           </button>
         </form>
+
+        {/* Scheduler Status Row */}
+        <div style={{ display: "flex", gap: "1.5rem", marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--colors-hairline)", flexWrap: "wrap", fontSize: "12.5px" }}>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Status: </span>
+            <strong style={{ color: "var(--colors-semantic-success)", fontWeight: 600 }}>Active (Naukri Ingestion)</strong>
+          </div>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Schedule: </span>
+            <strong style={{ color: "var(--colors-ink)" }}>Every 12h (43,200s)</strong>
+          </div>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Monitored Companies: </span>
+            <strong style={{ color: "var(--colors-ink)" }}>{companies.filter((c) => c.active).length} companies</strong>
+          </div>
+          <div>
+            <span style={{ color: "var(--colors-steel)" }}>Total Ingestion Runs: </span>
+            <strong style={{ color: "var(--colors-ink)" }}>{crawls.length}</strong>
+          </div>
+        </div>
       </section>
 
       {/* Metric Cards Grid */}
@@ -6444,7 +6447,7 @@ function AdminPage() {
             </div>
           </div>
           <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
-            Target career websites and portals monitored.
+            Target companies monitored for verified Naukri jobs.
           </p>
           {overview.pending_companies > 0 && (
             <div style={{ marginTop: "8px" }}>
@@ -6480,7 +6483,7 @@ function AdminPage() {
             </div>
           </div>
           <p className="linear-metric-caption" style={{ margin: "6px 0 0 0" }}>
-            Live roles ingested via JobSpy &amp; career adapters.
+            Live roles ingested via JobSpy &amp; Naukri.
           </p>
         </div>
 
@@ -6623,7 +6626,7 @@ function AdminPage() {
                         </span>
                       </div>
                       <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
-                        {c.website || c.career_page_url || "Direct candidate target submission"}
+                        Target Company for Naukri Job Ingestion
                       </span>
                     </div>
                   </div>
@@ -6673,14 +6676,14 @@ function AdminPage() {
       {/* Add Company Card */}
       <section className="linear-widget-panel">
         <div className="widget-header">
-          <h2 className="widget-title">Add Company & Career Page</h2>
-          <span className="widget-tag">Naukri Integration</span>
+          <h2 className="widget-title">Add Target Company</h2>
+          <span className="widget-tag">Naukri Ingestion</span>
         </div>
         <p style={{ color: "var(--colors-slate)", fontSize: "13.5px", marginBottom: "1rem" }}>
-          Add any target company. NextHire searches live openings on Naukri via JobSpy and indexes 10–12 verified roles for this company automatically.
+          Add any target company. NextHire searches live openings on Naukri via JobSpy and indexes verified roles for this company automatically.
         </p>
 
-        <form onSubmit={submitCompany} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px", alignItems: "flex-end" }}>
+        <form onSubmit={submitCompany} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", alignItems: "flex-end" }}>
           <label style={{ margin: 0 }}>
             <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
               Company Name *
@@ -6688,21 +6691,9 @@ function AdminPage() {
             <input
               required
               type="text"
-              placeholder="e.g. Infosys, TCS, Google, Spotify"
+              placeholder="e.g. Infosys, TCS, Google, Spotify, Microsoft"
               value={companyForm.name}
-              onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
-            />
-          </label>
-
-          <label style={{ margin: 0 }}>
-            <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
-              Career Page / Website (optional)
-            </span>
-            <input
-              type="url"
-              placeholder="https://company.com"
-              value={companyForm.career_page_url}
-              onChange={(e) => setCompanyForm({ ...companyForm, career_page_url: e.target.value, website: e.target.value })}
+              onChange={(e) => setCompanyForm({ name: e.target.value })}
             />
           </label>
 
@@ -6710,10 +6701,10 @@ function AdminPage() {
             className="primary-button"
             type="submit"
             disabled={addingCompany}
-            style={{ height: "40px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+            style={{ height: "40px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "0 18px" }}
           >
             <Plus size={15} />
-            <span>{addingCompany ? "Adding & Scraping Naukri..." : "Add Company"}</span>
+            <span>{addingCompany ? "Adding & Scraping Naukri..." : "Add Company & Fetch Naukri"}</span>
           </button>
         </form>
       </section>
@@ -6725,22 +6716,16 @@ function AdminPage() {
             <h2 className="widget-title">Edit Company: {editingCompany.name}</h2>
             <button className="button-link" onClick={() => setEditingCompany(null)}>Cancel</button>
           </div>
-          <form onSubmit={handleSaveEdit} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px", marginTop: "1rem" }}>
+          <form onSubmit={handleSaveEdit} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", marginTop: "1rem", alignItems: "flex-end" }}>
             <label style={{ margin: 0 }}>
-              Company Name
-              <input required type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            </label>
-            <label style={{ margin: 0 }}>
-              Career Page URL
-              <input required type="url" value={editForm.career_page_url} onChange={(e) => setEditForm({ ...editForm, career_page_url: e.target.value })} />
-            </label>
-            <label style={{ margin: 0 }}>
-              Website
-              <input type="url" value={editForm.website} onChange={(e) => setEditForm({ ...editForm, website: e.target.value })} />
+              <span style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--colors-ink)", marginBottom: "4px" }}>
+                Company Name *
+              </span>
+              <input required type="text" value={editForm.name} onChange={(e) => setEditForm({ name: e.target.value })} />
             </label>
             <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-              <button className="primary-button" type="submit">Save Changes</button>
-              <button className="button-secondary" type="button" onClick={() => setEditingCompany(null)}>Cancel</button>
+              <button className="primary-button" type="submit" style={{ height: "40px" }}>Save Changes</button>
+              <button className="button-secondary" type="button" onClick={() => setEditingCompany(null)} style={{ height: "40px" }}>Cancel</button>
             </div>
           </form>
         </section>
@@ -6763,11 +6748,11 @@ function AdminPage() {
               <RefreshCw size={12} className={resettingPrototype ? "spin" : ""} />
               <span>{resettingPrototype ? "Resetting..." : "Reset to Top 12"}</span>
             </button>
-            <span className="widget-tag">12-Hour Crawler Queue</span>
+            <span className="widget-tag">Naukri Ingestion Queue</span>
           </div>
         </div>
         <p style={{ color: "var(--colors-slate)", fontSize: "13.5px", marginBottom: "1rem" }}>
-          These companies are indexed periodically. Click "Scrape Now" to immediately fetch open listings from their careers page.
+          These companies are indexed periodically. Click "Fetch from Naukri" to immediately fetch open listings from Naukri.
         </p>
 
         {/* Whitelist Filter Tabs */}
@@ -6828,7 +6813,7 @@ function AdminPage() {
             <Search size={14} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--colors-steel)", pointerEvents: "none" }} />
             <input
               type="text"
-              placeholder="Search companies by name or URL (e.g. Google, Stripe, Apple, Adobe)..."
+              placeholder="Search companies by name (e.g. Google, Stripe, Apple, Adobe)..."
               value={companySearch}
               onChange={(e) => {
                 setCompanySearch(e.target.value);
@@ -6913,19 +6898,7 @@ function AdminPage() {
                           </span>
                         )}
                       </div>
-                      {company.career_page_url ? (
-                        <a
-                          href={company.career_page_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ fontSize: "12px", color: "var(--colors-link-blue)", display: "inline-flex", alignItems: "center", gap: "4px", marginTop: "2px", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                        >
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{company.career_page_url}</span>
-                          <ExternalLink size={10} style={{ flexShrink: 0 }} />
-                        </a>
-                      ) : (
-                        <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>Candidate Submitted Target</span>
-                      )}
+                      <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>Naukri Monitored Target</span>
                     </div>
                   </div>
 
@@ -6983,7 +6956,7 @@ function AdminPage() {
                           style={{ fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
                         >
                           <RefreshCw size={12} className={isScraping ? "spin" : ""} />
-                          <span>{isScraping ? "Scraping Naukri..." : "Scrape Naukri"}</span>
+                          <span>{isScraping ? "Fetching Naukri..." : "Fetch from Naukri"}</span>
                         </button>
 
                         <button
@@ -7063,7 +7036,7 @@ function AdminPage() {
         </p>
 
         {jobs.length === 0 ? (
-          <p className="empty-message">No jobs discovered yet. Add a company and click "Scrape Now" to fetch live openings.</p>
+          <p className="empty-message">No jobs discovered yet. Add a company and click "Fetch from Naukri" to fetch live openings.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {jobs.slice(0, 8).map(({ job, company_name }) => (

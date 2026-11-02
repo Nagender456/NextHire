@@ -1505,6 +1505,24 @@ async def schedule_ingestion(admin: User = Depends(require_admin)) -> dict[str, 
     return {"status": "queued", "job_ids": queued}
 
 
+@router.post("/admin/jobs/purge-career-site-jobs")
+async def purge_career_site_jobs_endpoint(
+    admin: User = Depends(require_admin),
+) -> dict[str, Any]:
+    deleted = ingestion_store.purge_non_naukri_jobs()
+    admin_store.audit(
+        admin.id,
+        "career_site_jobs_purged",
+        "jobs",
+        metadata={"deleted": str(deleted)},
+    )
+    return {
+        "status": "succeeded",
+        "deleted_jobs_count": deleted,
+        "remaining_naukri_jobs": len(ingestion_store.jobs),
+    }
+
+
 @router.get("/admin/jobs/queue")
 async def queue_status(_admin: User = Depends(require_admin)) -> dict[str, int]:
     return JobQueue(get_settings().job_queue_path).counts()

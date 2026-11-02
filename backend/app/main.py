@@ -40,6 +40,9 @@ async def lifespan(_app: FastAPI):
     import sys
     is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
     if not is_testing:
+        from app.job_ingestion import ingestion_store
+
+        ingestion_store.purge_non_naukri_jobs()
         auth_store.ensure_admin("admin@nexthire.dev", "Admin12345!", "Administrator")
         auth_store.ensure_admin("admin@example.com", "Admin12345!", "Admin")
         scraper_scheduler.start()

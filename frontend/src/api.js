@@ -84,6 +84,10 @@ export function resetPrototypeCompanies() {
   return request("/api/v1/admin/companies/reset-prototype", { method: "POST" });
 }
 
+export function purgeCareerSiteJobs() {
+  return request("/api/v1/admin/jobs/purge-career-site-jobs", { method: "POST" });
+}
+
 export function getSchedulerStatus() {
   return request("/api/v1/admin/scheduler/status");
 }

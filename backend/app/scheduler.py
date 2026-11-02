@@ -113,7 +113,7 @@ class ScraperScheduler:
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "next_run_at": self.next_run_at.isoformat() if self.next_run_at else None,
             "total_runs": self.total_runs,
-            "active_companies": len([c for c in ingestion_store.companies.values() if c.active and c.career_page_url]),
+            "active_companies": len([c for c in ingestion_store.companies.values() if c.active]),
             "last_result": self.last_result,
         }
 

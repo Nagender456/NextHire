@@ -554,11 +554,6 @@ class NaukriJobSpyAdapter(GenericCareerAdapter):
         except Exception as exc:
             logger.warning("JobSpy Naukri scraper error for %s: %s", company.name, exc)
 
-        if company.career_page_url and not str(company.career_page_url).startswith("https://www.naukri.com"):
-            try:
-                return super().discover_jobs(company)
-            except Exception:
-                pass
         return []
 
 
@@ -644,10 +639,79 @@ class JobIngestionStore:
         except Exception:
             self._mongo_db = None
 
+    def purge_non_naukri_jobs(self) -> int:
+        """Permanently remove jobs that were extracted from company career sites, retaining only Naukri jobs."""
+        deleted_count = 0
+        filter_non_naukri = {
+            "$and": [
+                {"url": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                {"source_url": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                {"description": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                {"external_job_id": {"$not": {"$regex": "naukri", "$options": "i"}}},
+            ]
+        }
+        if self._mongo_db is not None:
+            try:
+                res1 = self._mongo_db.ingested_jobs.delete_many(filter_non_naukri)
+                deleted_count += res1.deleted_count
+                logger.info("Purged %d career-site jobs from ingested_jobs in MongoDB", res1.deleted_count)
+            except Exception as exc:
+                logger.warning("Error deleting career-site jobs from MongoDB ingested_jobs: %s", exc)
+
+            try:
+                if "jobs" in self._mongo_db.list_collection_names():
+                    res2 = self._mongo_db.jobs.delete_many(filter_non_naukri)
+                    deleted_count += res2.deleted_count
+                    logger.info("Purged %d career-site jobs from jobs in MongoDB", res2.deleted_count)
+            except Exception as exc:
+                logger.warning("Error deleting career-site jobs from MongoDB jobs: %s", exc)
+
+        to_remove = [
+            jid for jid, job in list(self.jobs.items())
+            if not (
+                "naukri" in (job.url or "").lower()
+                or "naukri" in (job.source_url or "").lower()
+                or "naukri" in (job.description or "").lower()
+                or "naukri" in (job.external_job_id or "").lower()
+            )
+        ]
+        for jid in to_remove:
+            self.jobs.pop(jid, None)
+
+        from app.repositories import repository, InMemoryRepository
+        if isinstance(repository, InMemoryRepository):
+            repository.jobs = [
+                j for j in repository.jobs
+                if (
+                    "naukri" in (j.url or "").lower()
+                    or "naukri" in (j.source_url or "").lower()
+                    or "naukri" in (j.description or "").lower()
+                    or "naukri" in (j.external_job_id or "").lower()
+                )
+            ]
+
+        return deleted_count + len(to_remove)
+
     def _load_from_mongo(self) -> None:
         if self._mongo_db is None:
             return
         try:
+            # Purge any legacy company career-site jobs from MongoDB upon startup
+            filter_non_naukri = {
+                "$and": [
+                    {"url": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                    {"source_url": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                    {"description": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                    {"external_job_id": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                ]
+            }
+            try:
+                self._mongo_db.ingested_jobs.delete_many(filter_non_naukri)
+                if "jobs" in self._mongo_db.list_collection_names():
+                    self._mongo_db.jobs.delete_many(filter_non_naukri)
+            except Exception as purge_err:
+                logger.warning("Error purging non-naukri jobs from mongo during load: %s", purge_err)
+
             for doc in self._mongo_db.ingested_companies.find():
                 c_data = dict(doc)
                 c_data.pop("_id", None)
@@ -656,6 +720,12 @@ class JobIngestionStore:
             for doc in self._mongo_db.ingested_jobs.find():
                 j_data = dict(doc)
                 j_data.pop("_id", None)
+                u = str(j_data.get("url") or "").lower()
+                su = str(j_data.get("source_url") or "").lower()
+                d = str(j_data.get("description") or "").lower()
+                ext = str(j_data.get("external_job_id") or "").lower()
+                if "naukri" not in u and "naukri" not in su and "naukri" not in d and "naukri" not in ext:
+                    continue
                 job = Job.model_validate(j_data)
                 clean_t = re.sub(r"^\d+\s+", "", job.title).strip()
                 comp = self.companies.get(job.company_id)
