@@ -4,10 +4,6 @@ from time import perf_counter
 from uuid import uuid4
 
 from dotenv import load_dotenv
-load_dotenv()
-load_dotenv("d:/Programs/NextHire(Copilot)/.env")
-load_dotenv("d:/Programs/NextHire(Copilot)/backend/.env")
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
@@ -23,6 +19,10 @@ from app.metrics import metrics
 from app.rate_limit import RedisRateLimiter, rate_limiter
 from app.routes import auth_router, router as application_router
 from app.scheduler import scraper_scheduler
+
+load_dotenv()
+load_dotenv("d:/Programs/NextHire(Copilot)/.env")
+load_dotenv("d:/Programs/NextHire(Copilot)/backend/.env")
 
 configure_logging()
 logger = logging.getLogger("nexthire.requests")

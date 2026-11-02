@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Any
 from fastapi import (
     APIRouter,
@@ -99,7 +100,6 @@ from app.security import generate_token, hash_password
 from app.services import service
 from app.documents import (
     ALLOWED_DOCUMENTS,
-    detect_entities,
     detect_entities_with_engine,
     extract_text,
     read_upload,
@@ -135,6 +135,7 @@ vector_search.jobs_provider = service.list_jobs
 
 router = APIRouter(prefix="/api/v1", tags=["application"])
 auth_router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
+logger = logging.getLogger(__name__)
 
 
 @auth_router.post("/signup", response_model=User, status_code=status.HTTP_201_CREATED)
