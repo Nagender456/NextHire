@@ -19,11 +19,38 @@ MAX_CRAWL_RETRIES = 2
 logger = logging.getLogger(__name__)
 
 COMMON_SKILLS = [
-    "Python", "FastAPI", "React", "TypeScript", "JavaScript", "C++", "Java",
-    "Go", "Rust", "Node.js", "Docker", "Kubernetes", "AWS", "GCP", "Azure",
-    "SQL", "PostgreSQL", "MongoDB", "Redis", "GraphQL", "Machine Learning",
-    "AI", "PyTorch", "TensorFlow", "Data Structures", "Algorithms", "System Design",
-    "CI/CD", "Linux", "Git", "Tailwind CSS", "Microservices",
+    "Python",
+    "FastAPI",
+    "React",
+    "TypeScript",
+    "JavaScript",
+    "C++",
+    "Java",
+    "Go",
+    "Rust",
+    "Node.js",
+    "Docker",
+    "Kubernetes",
+    "AWS",
+    "GCP",
+    "Azure",
+    "SQL",
+    "PostgreSQL",
+    "MongoDB",
+    "Redis",
+    "GraphQL",
+    "Machine Learning",
+    "AI",
+    "PyTorch",
+    "TensorFlow",
+    "Data Structures",
+    "Algorithms",
+    "System Design",
+    "CI/CD",
+    "Linux",
+    "Git",
+    "Tailwind CSS",
+    "Microservices",
 ]
 
 
@@ -105,32 +132,138 @@ def infer_skills_for_role(title: str, text: str = "") -> tuple[list[str], list[s
     clean = re.sub(r"^\d+\s+", "", title).strip().lower()
 
     # 1. Match title directly against role domains to prevent page footer keyword contamination
-    if any(k in clean for k in ("marketing", "seo", "aeo", "geo", "growth", "brand", "content strategy", "communications")):
-        return ["Digital Marketing", "SEO & AEO", "Content Strategy"], ["Growth Analytics", "Campaign Management"]
-    if any(k in clean for k in ("ar analyst", "ap analyst", "accounting", "finance", "audit", "tax", "treasury")):
-        return ["Financial Analysis", "Accounting", "Financial Reporting"], ["ERP Systems", "Excel / Financial Modeling"]
-    if any(k in clean for k in ("abuse investigator", "investigator", "compliance", "legal", "risk")):
-        return ["Risk & Compliance", "Investigation", "Policy Enforcement"], ["Incident Response", "Data Analysis"]
-    if any(k in clean for k in ("sales", "business development", "account manager", "account executive", "bdr", "sdr")):
-        return ["B2B Sales", "Account Management", "Client Relations"], ["Pipeline Management", "Negotiation"]
-    if any(k in clean for k in ("program manager", "product support", "product specialist")):
-        return ["Technical Program Management", "Cross-Functional Leadership", "Operations"], ["Agile", "Data Analytics"]
-    if any(k in clean for k in ("data center", "manufacturing", "mechanical", "electrical", "hardware")):
-        return ["Hardware Infrastructure", "Systems Engineering", "Troubleshooting"], ["Site Reliability", "Preventive Maintenance"]
-    if any(k in clean for k in ("ai engineer", "machine learning", "aiml", "research scientist", "audio", "data scientist")):
-        return ["Python", "Machine Learning", "Model Deployment", "PyTorch"], ["Distributed Systems", "Algorithms", "Deep Learning"]
+    if any(
+        k in clean
+        for k in (
+            "marketing",
+            "seo",
+            "aeo",
+            "geo",
+            "growth",
+            "brand",
+            "content strategy",
+            "communications",
+        )
+    ):
+        return ["Digital Marketing", "SEO & AEO", "Content Strategy"], [
+            "Growth Analytics",
+            "Campaign Management",
+        ]
+    if any(
+        k in clean
+        for k in (
+            "ar analyst",
+            "ap analyst",
+            "accounting",
+            "finance",
+            "audit",
+            "tax",
+            "treasury",
+        )
+    ):
+        return ["Financial Analysis", "Accounting", "Financial Reporting"], [
+            "ERP Systems",
+            "Excel / Financial Modeling",
+        ]
+    if any(
+        k in clean
+        for k in ("abuse investigator", "investigator", "compliance", "legal", "risk")
+    ):
+        return ["Risk & Compliance", "Investigation", "Policy Enforcement"], [
+            "Incident Response",
+            "Data Analysis",
+        ]
+    if any(
+        k in clean
+        for k in (
+            "sales",
+            "business development",
+            "account manager",
+            "account executive",
+            "bdr",
+            "sdr",
+        )
+    ):
+        return ["B2B Sales", "Account Management", "Client Relations"], [
+            "Pipeline Management",
+            "Negotiation",
+        ]
+    if any(
+        k in clean for k in ("program manager", "product support", "product specialist")
+    ):
+        return [
+            "Technical Program Management",
+            "Cross-Functional Leadership",
+            "Operations",
+        ], ["Agile", "Data Analytics"]
+    if any(
+        k in clean
+        for k in (
+            "data center",
+            "manufacturing",
+            "mechanical",
+            "electrical",
+            "hardware",
+        )
+    ):
+        return ["Hardware Infrastructure", "Systems Engineering", "Troubleshooting"], [
+            "Site Reliability",
+            "Preventive Maintenance",
+        ]
+    if any(
+        k in clean
+        for k in (
+            "ai engineer",
+            "machine learning",
+            "aiml",
+            "research scientist",
+            "audio",
+            "data scientist",
+        )
+    ):
+        return ["Python", "Machine Learning", "Model Deployment", "PyTorch"], [
+            "Distributed Systems",
+            "Algorithms",
+            "Deep Learning",
+        ]
 
-    if any(k in clean for k in ("software engineer", "backend", "frontend", "developer", "looker", "platform", "full stack")):
+    if any(
+        k in clean
+        for k in (
+            "software engineer",
+            "backend",
+            "frontend",
+            "developer",
+            "looker",
+            "platform",
+            "full stack",
+        )
+    ):
         if len(text.strip()) > 50 or "Opportunity Compatibility" in text:
-            if any(f in clean for f in ("frontend", "ui", "react", "web", "full stack")):
-                return ["React", "TypeScript", "JavaScript", "CSS"], ["Next.js", "Tailwind CSS", "REST APIs", "GraphQL"]
-            return ["Distributed Systems", "SQL", "API Design"], ["Docker", "Kubernetes", "Microservices", "CI/CD", "AWS"]
+            if any(
+                f in clean for f in ("frontend", "ui", "react", "web", "full stack")
+            ):
+                return ["React", "TypeScript", "JavaScript", "CSS"], [
+                    "Next.js",
+                    "Tailwind CSS",
+                    "REST APIs",
+                    "GraphQL",
+                ]
+            return ["Distributed Systems", "SQL", "API Design"], [
+                "Docker",
+                "Kubernetes",
+                "Microservices",
+                "CI/CD",
+                "AWS",
+            ]
 
     # 2. Extract explicitly mentioned common skills from title and description
     found: list[str] = []
     text_lower = f" {clean} {text.lower()} "
     for skill in COMMON_SKILLS:
-        if skill.lower() == "ai" and not any(k in clean for k in ("ai ", " ai", "artificial intelligence")):
+        if skill.lower() == "ai" and not any(
+            k in clean for k in ("ai ", " ai", "artificial intelligence")
+        ):
             continue
         pattern = r"\b" + re.escape(skill.lower()) + r"\b"
         if re.search(pattern, text_lower):
@@ -141,32 +274,114 @@ def infer_skills_for_role(title: str, text: str = "") -> tuple[list[str], list[s
     return [], []
 
 
-
 ARTICLE_SLUGS = {
-    "compatibility", "emerging-talent", "emergingtalent", "culture", "life-at",
-    "values", "diversity", "inclusion", "benefits", "perks", "working-here",
-    "how-we-hire", "interview-process", "our-story", "students", "university",
-    "internships-program", "leadership", "teams", "about", "about-us", "faq",
-    "contact", "privacy", "terms", "press", "news", "blog", "events", "offices",
-    "community", "stories", "why-work-here", "work-with-us", "workplace",
+    "compatibility",
+    "emerging-talent",
+    "emergingtalent",
+    "culture",
+    "life-at",
+    "values",
+    "diversity",
+    "inclusion",
+    "benefits",
+    "perks",
+    "working-here",
+    "how-we-hire",
+    "interview-process",
+    "our-story",
+    "students",
+    "university",
+    "internships-program",
+    "leadership",
+    "teams",
+    "about",
+    "about-us",
+    "faq",
+    "contact",
+    "privacy",
+    "terms",
+    "press",
+    "news",
+    "blog",
+    "events",
+    "offices",
+    "community",
+    "stories",
+    "why-work-here",
+    "work-with-us",
+    "workplace",
 }
 
 JOB_ROLE_KEYWORDS = (
-    "engineer", "developer", "architect", "manager", "specialist", "analyst",
-    "consultant", "director", "lead", "associate", "designer", "scientist",
-    "administrator", "coordinator", "officer", "writer", "recruiter",
-    "representative", "executive", "technician", "researcher", "intern",
-    "fellow", "counsel", "generalist", "operator", "head of", "vp", "chief",
-    "auditor", "accountant", "instructor", "strategist", "producer",
+    "engineer",
+    "developer",
+    "architect",
+    "manager",
+    "specialist",
+    "analyst",
+    "consultant",
+    "director",
+    "lead",
+    "associate",
+    "designer",
+    "scientist",
+    "administrator",
+    "coordinator",
+    "officer",
+    "writer",
+    "recruiter",
+    "representative",
+    "executive",
+    "technician",
+    "researcher",
+    "intern",
+    "fellow",
+    "counsel",
+    "generalist",
+    "operator",
+    "head of",
+    "vp",
+    "chief",
+    "auditor",
+    "accountant",
+    "instructor",
+    "strategist",
+    "producer",
 )
 
 NON_JOB_TITLES = (
-    "careers", "jobs", "home", "about us", "contact us", "privacy policy",
-    "terms of service", "press", "news", "blog", "overview", "faq",
-    "sign in", "log in", "apply", "search", "open roles", "all jobs",
-    "view all", "explore all", "join us", "work with us", "our culture",
-    "life at", "benefits", "compensation", "compatibility", "emerging talent",
-    "early career", "early careers", "students & grads", "university recruiting",
+    "careers",
+    "jobs",
+    "home",
+    "about us",
+    "contact us",
+    "privacy policy",
+    "terms of service",
+    "press",
+    "news",
+    "blog",
+    "overview",
+    "faq",
+    "sign in",
+    "log in",
+    "apply",
+    "search",
+    "open roles",
+    "all jobs",
+    "view all",
+    "explore all",
+    "join us",
+    "work with us",
+    "our culture",
+    "life at",
+    "benefits",
+    "compensation",
+    "compatibility",
+    "emerging talent",
+    "early career",
+    "early careers",
+    "students & grads",
+    "university recruiting",
 )
 
 
@@ -191,7 +406,7 @@ def ai_verify_job_opening(
             f"URL: {url}\n"
             f"Title: {title}\n"
             f"Snippet: {snippet[:400]}\n\n"
-            f"Output valid JSON ONLY: {{\"is_job_opening\": true/false, \"clean_title\": \"...\", \"reason\": \"...\"}}"
+            f'Output valid JSON ONLY: {{"is_job_opening": true/false, "clean_title": "...", "reason": "..."}}'
         )
         candidate_models = (
             "gemini-flash-lite-latest",
@@ -204,17 +419,20 @@ def ai_verify_job_opening(
         )
         # Direct httpx REST call
         import httpx
+
         for model_candidate in candidate_models:
             try:
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={api_key}"
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"responseMimeType": "application/json"}
+                    "generationConfig": {"responseMimeType": "application/json"},
                 }
                 with httpx.Client(timeout=15.0) as client:
                     resp = client.post(g_url, json=payload)
                     if resp.status_code == 200:
-                        raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                        raw = resp.json()["candidates"][0]["content"]["parts"][0][
+                            "text"
+                        ]
                         clean = re.sub(r"^```(?:json)?\s*", "", raw.strip())
                         clean = re.sub(r"\s*```$", "", clean).strip()
                         data = json.loads(clean)
@@ -230,13 +448,14 @@ def ai_verify_job_opening(
         # Fallback to genai SDK if installed
         try:
             from google import genai
+
             client = genai.Client(api_key=api_key)
             for model_candidate in candidate_models:
                 try:
                     resp = client.models.generate_content(
                         model=model_candidate,
                         contents=prompt,
-                        config={"response_mime_type": "application/json"}
+                        config={"response_mime_type": "application/json"},
                     )
                     if resp and resp.text:
                         clean = re.sub(r"^```(?:json)?\s*", "", resp.text.strip())
@@ -263,41 +482,102 @@ def ai_verify_job_opening(
         return False, "", f"URL slug '{path_segments[-1]}' is a culture/article page."
 
     for seg in path_segments:
-        if any(art in seg for art in ("compatibility", "emerging-talent", "life-at", "our-values")):
+        if any(
+            art in seg
+            for art in ("compatibility", "emerging-talent", "life-at", "our-values")
+        ):
             return False, "", f"URL segment '{seg}' indicates article or culture page."
 
     if title_lower in NON_JOB_TITLES:
-        return False, "", f"Title '{title_clean}' is a navigation or portal landing page, not a job role."
+        return (
+            False,
+            "",
+            f"Title '{title_clean}' is a navigation or portal landing page, not a job role.",
+        )
 
-    if any(title_lower.startswith(prefix) for prefix in (
-        "learn how", "why we", "explore our", "start your", "see what", "join our",
-        "read our", "find out", "what it's like", "discover our", "how we", "we're hiring"
-    )):
-        return False, "", f"Title '{title_clean}' is marketing/article headline, not a job title."
+    if any(
+        title_lower.startswith(prefix)
+        for prefix in (
+            "learn how",
+            "why we",
+            "explore our",
+            "start your",
+            "see what",
+            "join our",
+            "read our",
+            "find out",
+            "what it's like",
+            "discover our",
+            "how we",
+            "we're hiring",
+        )
+    ):
+        return (
+            False,
+            "",
+            f"Title '{title_clean}' is marketing/article headline, not a job title.",
+        )
 
     has_job_url_structure = any(
-        marker in parsed.path.lower() for marker in (
-            "/listing/", "/job/", "/jobs/", "/role/", "/roles/", "/position/", "/positions/", "/opening/"
+        marker in parsed.path.lower()
+        for marker in (
+            "/listing/",
+            "/job/",
+            "/jobs/",
+            "/role/",
+            "/roles/",
+            "/position/",
+            "/positions/",
+            "/opening/",
         )
-    ) or any(param in parsed.query.lower() for param in ("gh_jid", "requisition", "jobid", "id="))
+    ) or any(
+        param in parsed.query.lower()
+        for param in ("gh_jid", "requisition", "jobid", "id=")
+    )
 
     has_role_keyword = any(kw in title_lower for kw in JOB_ROLE_KEYWORDS)
 
     snippet_lower = snippet.lower()
-    has_job_markers = any(m in snippet_lower for m in (
-        "responsibilities", "qualifications", "requirements", "what you'll do",
-        "minimum qualifications", "years of experience", "apply for this job", "about the role"
-    ))
+    has_job_markers = any(
+        m in snippet_lower
+        for m in (
+            "responsibilities",
+            "qualifications",
+            "requirements",
+            "what you'll do",
+            "minimum qualifications",
+            "years of experience",
+            "apply for this job",
+            "about the role",
+        )
+    )
 
     if has_job_url_structure and (has_role_keyword or has_job_markers):
-        clean = re.sub(r"\s*[-|·•]\s*" + re.escape(company_name) + r".*$", "", title_clean, flags=re.IGNORECASE)
+        clean = re.sub(
+            r"\s*[-|·•]\s*" + re.escape(company_name) + r".*$",
+            "",
+            title_clean,
+            flags=re.IGNORECASE,
+        )
         return True, clean.strip(), "Verified open job listing with job URL pattern."
 
     if has_role_keyword and (has_job_markers or len(path_segments) >= 2):
-        clean = re.sub(r"\s*[-|·•]\s*" + re.escape(company_name) + r".*$", "", title_clean, flags=re.IGNORECASE)
+        clean = re.sub(
+            r"\s*[-|·•]\s*" + re.escape(company_name) + r".*$",
+            "",
+            title_clean,
+            flags=re.IGNORECASE,
+        )
         return True, clean.strip(), "Verified role title matching career vacancy."
 
-    if "stage10" in url or "test" in url or "mock" in url or "software" in title_lower or "engineer" in title_lower or "backend" in title_lower:
+    if (
+        "stage10" in url
+        or "test" in url
+        or "mock" in url
+        or "software" in title_lower
+        or "engineer" in title_lower
+        or "backend" in title_lower
+    ):
         return True, title_clean, "Test job accepted."
 
     return False, "", "Content does not exhibit job posting attributes."
@@ -306,13 +586,34 @@ def ai_verify_job_opening(
 def _looks_like_job_link(url: str, text: str) -> bool:
     value = f"{url} {text}".lower()
     job_indicators = (
-        "job", "career", "position", "vacanc", "opening", "role",
-        "engineer", "developer", "designer", "manager", "architect",
-        "specialist", "intern", "analyst", "lead", "scientist",
+        "job",
+        "career",
+        "position",
+        "vacanc",
+        "opening",
+        "role",
+        "engineer",
+        "developer",
+        "designer",
+        "manager",
+        "architect",
+        "specialist",
+        "intern",
+        "analyst",
+        "lead",
+        "scientist",
     )
     non_job_indicators = (
-        "privacy", "terms", "cookie", "login", "signin", "signup",
-        "press", "blog", "contact", "about-us",
+        "privacy",
+        "terms",
+        "cookie",
+        "login",
+        "signin",
+        "signup",
+        "press",
+        "blog",
+        "contact",
+        "about-us",
     )
     if any(nj in value for nj in non_job_indicators) and not any(
         term in url.lower() for term in ("job", "position", "career")
@@ -326,9 +627,20 @@ def _job_from_page(company: Company, url: str, title: str, html: str) -> Job:
     parser.feed(html)
     text = re.sub(r"\s+", " ", " ".join(text for _, text in parser.links)).strip()
     clean_title = re.sub(r"^\d+\s+", "", title).strip()
-    clean_title = re.sub(r"\s*[-|·•]\s*" + re.escape(company.name) + r".*$", "", clean_title, flags=re.IGNORECASE).strip()
+    clean_title = re.sub(
+        r"\s*[-|·•]\s*" + re.escape(company.name) + r".*$",
+        "",
+        clean_title,
+        flags=re.IGNORECASE,
+    ).strip()
     if not clean_title or clean_title.lower() in (
-        "apply", "view role", "view job", "details", "open role", "learn more", "more"
+        "apply",
+        "view role",
+        "view job",
+        "details",
+        "open role",
+        "learn more",
+        "more",
     ):
         path_slug = urlparse(url).path.rstrip("/").split("/")[-1]
         clean_title = re.sub(r"[-_]+", " ", path_slug).title()
@@ -336,7 +648,11 @@ def _job_from_page(company: Company, url: str, title: str, html: str) -> Job:
     external_id = hashlib.sha256(_canonical_url(url).encode()).hexdigest()[:16]
     required_skills, preferred_skills = infer_skills_for_role(clean_title, text)
 
-    is_nav_soup = "Opportunity Compatibility" in text or "Emerging talent" in text or len(text) < 40
+    is_nav_soup = (
+        "Opportunity Compatibility" in text
+        or "Emerging talent" in text
+        or len(text) < 40
+    )
     clean_desc = (
         f"Join {company.name} as {clean_title}. Work with high-impact teams to design, deliver, and scale solutions across global operations."
         if is_nav_soup
@@ -384,10 +700,23 @@ class GenericCareerAdapter:
                 continue
             seen_canonical.add(canon)
 
-            is_job, clean_title, reason = ai_verify_job_opening(company.name, url, text, html)
+            is_job, clean_title, reason = ai_verify_job_opening(
+                company.name, url, text, html
+            )
             if is_job:
-                verified_jobs.append(_job_from_page(company, url, clean_title or text, html))
-            elif any(d in url.lower() for d in ("/search", "/open-roles", "/listings", "/all-jobs", "/positions")):
+                verified_jobs.append(
+                    _job_from_page(company, url, clean_title or text, html)
+                )
+            elif any(
+                d in url.lower()
+                for d in (
+                    "/search",
+                    "/open-roles",
+                    "/listings",
+                    "/all-jobs",
+                    "/positions",
+                )
+            ):
                 directory_urls.append(url)
 
         # If primary page was a portal with no direct jobs but has a directory/search link, crawl directory
@@ -402,11 +731,17 @@ class GenericCareerAdapter:
                     if canon in seen_canonical:
                         continue
                     seen_canonical.add(canon)
-                    is_job, clean_title, reason = ai_verify_job_opening(company.name, url, text, dir_html)
+                    is_job, clean_title, reason = ai_verify_job_opening(
+                        company.name, url, text, dir_html
+                    )
                     if is_job:
-                        verified_jobs.append(_job_from_page(company, url, clean_title or text, dir_html))
+                        verified_jobs.append(
+                            _job_from_page(company, url, clean_title or text, dir_html)
+                        )
             except Exception as exc:
-                logger.warning("Error crawling directory page for %s: %s", company.name, exc)
+                logger.warning(
+                    "Error crawling directory page for %s: %s", company.name, exc
+                )
 
         return verified_jobs
 
@@ -423,7 +758,11 @@ def _jobs_from_jobspy_df(df, company: Company | None = None) -> list[Job]:
             continue
 
         job_url = str(row.get("job_url") or "").strip()
-        if not job_url or job_url.lower() in ("nan", "none") or not job_url.startswith("http"):
+        if (
+            not job_url
+            or job_url.lower() in ("nan", "none")
+            or not job_url.startswith("http")
+        ):
             continue
 
         row_comp_name = str(row.get("company") or "").strip()
@@ -435,7 +774,11 @@ def _jobs_from_jobspy_df(df, company: Company | None = None) -> list[Job]:
             display_comp_name = company.name
         else:
             found_company = next(
-                (c for c in ingestion_store.companies.values() if c.name.lower() == row_comp_name.lower()),
+                (
+                    c
+                    for c in ingestion_store.companies.values()
+                    if c.name.lower() == row_comp_name.lower()
+                ),
                 None,
             )
             if found_company:
@@ -462,15 +805,23 @@ def _jobs_from_jobspy_df(df, company: Company | None = None) -> list[Job]:
         if raw_skills and raw_skills.lower() not in ("nan", "none"):
             for s in re.split(r"[,/|;]+", raw_skills):
                 clean_s = s.strip()
-                if clean_s and clean_s.lower() not in ("nan", "none") and len(clean_s) <= 40:
+                if (
+                    clean_s
+                    and clean_s.lower() not in ("nan", "none")
+                    and len(clean_s) <= 40
+                ):
                     parsed_skills.append(clean_s)
 
         if len(parsed_skills) >= 2:
             required_skills = parsed_skills[:4]
             preferred_skills = parsed_skills[4:8]
         else:
-            inferred_req, inferred_pref = infer_skills_for_role(title, str(row.get("description") or ""))
-            required_skills = parsed_skills + [s for s in inferred_req if s not in parsed_skills]
+            inferred_req, inferred_pref = infer_skills_for_role(
+                title, str(row.get("description") or "")
+            )
+            required_skills = parsed_skills + [
+                s for s in inferred_req if s not in parsed_skills
+            ]
             required_skills = required_skills[:4]
             preferred_skills = inferred_pref[:4]
 
@@ -533,9 +884,13 @@ class NaukriJobSpyAdapter(GenericCareerAdapter):
         import os
         import sys
 
-        is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+        is_testing = (
+            "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+        )
         if is_testing:
-            if company.career_page_url and not str(company.career_page_url).startswith("https://www.naukri.com"):
+            if company.career_page_url and not str(company.career_page_url).startswith(
+                "https://www.naukri.com"
+            ):
                 return super().discover_jobs(company)
             return []
 
@@ -577,7 +932,9 @@ def _adapter_for(company: Company) -> GenericCareerAdapter:
     import os
     import sys
 
-    is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+    is_testing = (
+        "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+    )
     if is_testing:
         if company.source_adapter in ADAPTERS:
             return ADAPTERS[company.source_adapter]
@@ -629,7 +986,11 @@ class JobIngestionStore:
         try:
             import os
             import sys
-            is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+
+            is_testing = (
+                "pytest" in sys.modules
+                or os.environ.get("PYTEST_CURRENT_TEST") is not None
+            )
             settings = get_settings()
             if settings.mongodb_url and not is_testing:
                 client = MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=500)
@@ -654,20 +1015,32 @@ class JobIngestionStore:
             try:
                 res1 = self._mongo_db.ingested_jobs.delete_many(filter_non_naukri)
                 deleted_count += res1.deleted_count
-                logger.info("Purged %d career-site jobs from ingested_jobs in MongoDB", res1.deleted_count)
+                logger.info(
+                    "Purged %d career-site jobs from ingested_jobs in MongoDB",
+                    res1.deleted_count,
+                )
             except Exception as exc:
-                logger.warning("Error deleting career-site jobs from MongoDB ingested_jobs: %s", exc)
+                logger.warning(
+                    "Error deleting career-site jobs from MongoDB ingested_jobs: %s",
+                    exc,
+                )
 
             try:
                 if "jobs" in self._mongo_db.list_collection_names():
                     res2 = self._mongo_db.jobs.delete_many(filter_non_naukri)
                     deleted_count += res2.deleted_count
-                    logger.info("Purged %d career-site jobs from jobs in MongoDB", res2.deleted_count)
+                    logger.info(
+                        "Purged %d career-site jobs from jobs in MongoDB",
+                        res2.deleted_count,
+                    )
             except Exception as exc:
-                logger.warning("Error deleting career-site jobs from MongoDB jobs: %s", exc)
+                logger.warning(
+                    "Error deleting career-site jobs from MongoDB jobs: %s", exc
+                )
 
         to_remove = [
-            jid for jid, job in list(self.jobs.items())
+            jid
+            for jid, job in list(self.jobs.items())
             if not (
                 "naukri" in (job.url or "").lower()
                 or "naukri" in (job.source_url or "").lower()
@@ -679,9 +1052,11 @@ class JobIngestionStore:
             self.jobs.pop(jid, None)
 
         from app.repositories import repository, InMemoryRepository
+
         if isinstance(repository, InMemoryRepository):
             repository.jobs = [
-                j for j in repository.jobs
+                j
+                for j in repository.jobs
                 if (
                     "naukri" in (j.url or "").lower()
                     or "naukri" in (j.source_url or "").lower()
@@ -702,7 +1077,11 @@ class JobIngestionStore:
                     {"url": {"$not": {"$regex": "naukri", "$options": "i"}}},
                     {"source_url": {"$not": {"$regex": "naukri", "$options": "i"}}},
                     {"description": {"$not": {"$regex": "naukri", "$options": "i"}}},
-                    {"external_job_id": {"$not": {"$regex": "naukri", "$options": "i"}}},
+                    {
+                        "external_job_id": {
+                            "$not": {"$regex": "naukri", "$options": "i"}
+                        }
+                    },
                 ]
             }
             try:
@@ -710,7 +1089,10 @@ class JobIngestionStore:
                 if "jobs" in self._mongo_db.list_collection_names():
                     self._mongo_db.jobs.delete_many(filter_non_naukri)
             except Exception as purge_err:
-                logger.warning("Error purging non-naukri jobs from mongo during load: %s", purge_err)
+                logger.warning(
+                    "Error purging non-naukri jobs from mongo during load: %s",
+                    purge_err,
+                )
 
             for doc in self._mongo_db.ingested_companies.find():
                 c_data = dict(doc)
@@ -724,14 +1106,24 @@ class JobIngestionStore:
                 su = str(j_data.get("source_url") or "").lower()
                 d = str(j_data.get("description") or "").lower()
                 ext = str(j_data.get("external_job_id") or "").lower()
-                if "naukri" not in u and "naukri" not in su and "naukri" not in d and "naukri" not in ext:
+                if (
+                    "naukri" not in u
+                    and "naukri" not in su
+                    and "naukri" not in d
+                    and "naukri" not in ext
+                ):
                     continue
                 job = Job.model_validate(j_data)
                 clean_t = re.sub(r"^\d+\s+", "", job.title).strip()
                 comp = self.companies.get(job.company_id)
                 company_name = comp.name if comp else ""
                 if company_name:
-                    clean_t = re.sub(r"\s*[-|·•]\s*" + re.escape(company_name) + r".*$", "", clean_t, flags=re.IGNORECASE).strip()
+                    clean_t = re.sub(
+                        r"\s*[-|·•]\s*" + re.escape(company_name) + r".*$",
+                        "",
+                        clean_t,
+                        flags=re.IGNORECASE,
+                    ).strip()
 
                 needs_enrich = (
                     clean_t != job.title
@@ -740,7 +1132,10 @@ class JobIngestionStore:
                 )
                 if needs_enrich:
                     req, pref = infer_skills_for_role(clean_t, job.description)
-                    is_nav_soup = "Opportunity Compatibility" in job.description or len(job.description) < 40
+                    is_nav_soup = (
+                        "Opportunity Compatibility" in job.description
+                        or len(job.description) < 40
+                    )
                     c_desc = (
                         f"Join {company_name or 'the team'} as {clean_t}. Work with high-impact teams to design, deliver, and scale solutions across global operations."
                         if is_nav_soup
@@ -751,20 +1146,24 @@ class JobIngestionStore:
                         if is_nav_soup
                         else job.summary
                     )
-                    job = job.model_copy(update={
-                        "title": clean_t,
-                        "required_skills": req,
-                        "preferred_skills": pref,
-                        "description": c_desc,
-                        "summary": c_sum,
-                    })
+                    job = job.model_copy(
+                        update={
+                            "title": clean_t,
+                            "required_skills": req,
+                            "preferred_skills": pref,
+                            "description": c_desc,
+                            "summary": c_sum,
+                        }
+                    )
                     self._mongo_db.ingested_jobs.update_one(
                         {"id": job.id},
                         {"$set": job.model_dump(mode="json")},
                         upsert=True,
                     )
                 self.jobs[job.id] = job
-            for doc in self._mongo_db.ingested_crawls.find().sort("started_at", -1).limit(100):
+            for doc in (
+                self._mongo_db.ingested_crawls.find().sort("started_at", -1).limit(100)
+            ):
                 cr_data = dict(doc)
                 cr_data.pop("_id", None)
                 crawl = CrawlResult.model_validate(cr_data)
@@ -966,7 +1365,8 @@ class JobIngestionStore:
             id=company_id,
             name=payload.name,
             website=payload.website,
-            career_page_url=payload.career_page_url or f"https://www.naukri.com/{slug}-jobs",
+            career_page_url=payload.career_page_url
+            or f"https://www.naukri.com/{slug}-jobs",
             verification_status="verified" if verified else "pending",
             source_adapter="naukri",
             requested_by_user_id=requested_by,
@@ -1079,7 +1479,12 @@ class JobIngestionStore:
                         try:
                             self._mongo_db.ingested_jobs.update_one(
                                 {"id": job_id},
-                                {"$set": {"status": "closed", "last_seen_at": datetime.now(UTC).isoformat()}},
+                                {
+                                    "$set": {
+                                        "status": "closed",
+                                        "last_seen_at": datetime.now(UTC).isoformat(),
+                                    }
+                                },
                             )
                         except Exception:
                             pass
@@ -1112,7 +1517,9 @@ class JobIngestionStore:
                         {"$set": self.companies[company_id].model_dump(mode="json")},
                         upsert=True,
                     )
-                    self._mongo_db.ingested_crawls.insert_one(result.model_dump(mode="json"))
+                    self._mongo_db.ingested_crawls.insert_one(
+                        result.model_dump(mode="json")
+                    )
                 except Exception:
                     pass
         except CrawlError as error:
@@ -1150,7 +1557,9 @@ class JobIngestionStore:
                         {"$set": self.companies[company_id].model_dump(mode="json")},
                         upsert=True,
                     )
-                    self._mongo_db.ingested_crawls.insert_one(result.model_dump(mode="json"))
+                    self._mongo_db.ingested_crawls.insert_one(
+                        result.model_dump(mode="json")
+                    )
                 except Exception:
                     pass
         self.crawls.append(result)
@@ -1172,7 +1581,9 @@ class JobIngestionStore:
                 results_wanted=results_wanted,
             )
         except Exception as exc:
-            logger.warning("JobSpy scrape_jobs failed for search '%s': %s", search_term, exc)
+            logger.warning(
+                "JobSpy scrape_jobs failed for search '%s': %s", search_term, exc
+            )
             return []
 
         if df is None or df.empty:
@@ -1194,4 +1605,3 @@ class JobIngestionStore:
 
 
 ingestion_store = JobIngestionStore()
-

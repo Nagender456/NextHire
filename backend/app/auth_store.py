@@ -40,8 +40,12 @@ class AuthStore:
         try:
             import os
             import sys
+
             # In test suites, do not bind to the local MongoDB to preserve test isolation
-            is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+            is_testing = (
+                "pytest" in sys.modules
+                or os.environ.get("PYTEST_CURRENT_TEST") is not None
+            )
             settings = get_settings()
             if settings.mongodb_url and not is_testing:
                 client = MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=500)
@@ -86,7 +90,11 @@ class AuthStore:
             user_id = u.get("id") or str(u.get("_id"))
             email = u.get("email", "")
             role_val = u.get("role", UserRole.USER.value)
-            if email in ("admin@nexthire.dev", "admin@example.com", "nagender@gmail.com"):
+            if email in (
+                "admin@nexthire.dev",
+                "admin@example.com",
+                "nagender@gmail.com",
+            ):
                 role_val = UserRole.ADMIN.value
             self.users[user_id] = {
                 "email": email,
@@ -106,6 +114,7 @@ class AuthStore:
                     pass
                 self._init_user_collections(user_id)
         import time as _t
+
         now = _t.time()
         try:
             for s in self._mongo_db.sessions.find({"expires_at": {"$gt": now}}):
@@ -125,7 +134,13 @@ class AuthStore:
             try:
                 self._mongo_db.sessions.update_one(
                     {"token": token},
-                    {"$set": {"token": token, "user_id": user_id, "expires_at": expires_at}},
+                    {
+                        "$set": {
+                            "token": token,
+                            "user_id": user_id,
+                            "expires_at": expires_at,
+                        }
+                    },
                     upsert=True,
                 )
             except Exception:
@@ -133,6 +148,7 @@ class AuthStore:
 
     def get_session_user_id(self, token: str) -> str | None:
         import time as _t
+
         now = _t.time()
         if not token or token in self.revoked_sessions:
             return None
@@ -144,11 +160,15 @@ class AuthStore:
             return None
         if self._mongo_db is not None:
             try:
-                doc = self._mongo_db.sessions.find_one({"token": token, "expires_at": {"$gt": now}})
+                doc = self._mongo_db.sessions.find_one(
+                    {"token": token, "expires_at": {"$gt": now}}
+                )
                 if doc and doc.get("user_id"):
                     uid = doc["user_id"]
                     self.sessions[token] = uid
-                    self.session_expires_at[token] = float(doc.get("expires_at", now + 86400))
+                    self.session_expires_at[token] = float(
+                        doc.get("expires_at", now + 86400)
+                    )
                     return uid
             except Exception:
                 pass
@@ -185,6 +205,7 @@ class AuthStore:
     ) -> User:
         user = self.find_by_email(email)
         from app.security import hash_password
+
         pwd_hash = hash_password(password)
         if user:
             self.set_user_role(user.id, UserRole.ADMIN)
@@ -193,7 +214,12 @@ class AuthStore:
                 try:
                     self._mongo_db.users.update_one(
                         {"id": user.id},
-                        {"$set": {"password_hash": pwd_hash, "role": UserRole.ADMIN.value}},
+                        {
+                            "$set": {
+                                "password_hash": pwd_hash,
+                                "role": UserRole.ADMIN.value,
+                            }
+                        },
                     )
                 except Exception:
                     pass
@@ -220,14 +246,16 @@ class AuthStore:
             try:
                 self._mongo_db.users.update_one(
                     {"id": user.id},
-                    {"$set": {
-                        "id": user.id,
-                        "email": email,
-                        "password_hash": pwd_hash,
-                        "display_name": display_name,
-                        "created_at": now_iso,
-                        "role": UserRole.ADMIN.value,
-                    }},
+                    {
+                        "$set": {
+                            "id": user.id,
+                            "email": email,
+                            "password_hash": pwd_hash,
+                            "display_name": display_name,
+                            "created_at": now_iso,
+                            "role": UserRole.ADMIN.value,
+                        }
+                    },
                     upsert=True,
                 )
                 self._mongo_db.profiles.update_one(
@@ -261,14 +289,16 @@ class AuthStore:
             try:
                 self._mongo_db.users.update_one(
                     {"id": user.id},
-                    {"$set": {
-                        "id": user.id,
-                        "email": email,
-                        "password_hash": password_hash,
-                        "display_name": display_name,
-                        "created_at": self.users[user.id]["created_at"],
-                        "role": user.role.value,
-                    }},
+                    {
+                        "$set": {
+                            "id": user.id,
+                            "email": email,
+                            "password_hash": password_hash,
+                            "display_name": display_name,
+                            "created_at": self.users[user.id]["created_at"],
+                            "role": user.role.value,
+                        }
+                    },
                     upsert=True,
                 )
                 self._mongo_db.profiles.update_one(
@@ -290,7 +320,11 @@ class AuthStore:
         data = self.users.get(user_id)
         if not data:
             return None
-        profile_name = self.profiles[user_id].display_name if user_id in self.profiles else data.get("display_name", "User")
+        profile_name = (
+            self.profiles[user_id].display_name
+            if user_id in self.profiles
+            else data.get("display_name", "User")
+        )
         return User(
             id=user_id,
             email=data["email"],
@@ -340,7 +374,9 @@ class AuthStore:
                 pass
         return updated
 
-    def _sanitize_entity(self, entity_type: str, data: dict[str, Any]) -> dict[str, Any]:
+    def _sanitize_entity(
+        self, entity_type: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
         e = dict(data)
         if entity_type == "experience":
             if not e.get("company"):
@@ -552,4 +588,3 @@ class AuthStore:
 
 
 auth_store = AuthStore()
-

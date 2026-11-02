@@ -160,15 +160,28 @@ def _learning(skill: str, required: bool) -> LearningOpportunity:
 
 def get_role_domain(title: str) -> str:
     tl = (title or "").lower()
-    if re.search(r"\b(marketing|seo|aeo|geo|growth|brand|campaign|content|communications)\b", tl):
+    if re.search(
+        r"\b(marketing|seo|aeo|geo|growth|brand|campaign|content|communications)\b", tl
+    ):
         return "marketing"
-    if re.search(r"\b(finance|accounting|ar analyst|ap analyst|tax|audit|treasury)\b", tl):
+    if re.search(
+        r"\b(finance|accounting|ar analyst|ap analyst|tax|audit|treasury)\b", tl
+    ):
         return "finance"
-    if re.search(r"\b(sales|account executive|business development|bdr|sdr|account manager)\b", tl):
+    if re.search(
+        r"\b(sales|account executive|business development|bdr|sdr|account manager)\b",
+        tl,
+    ):
         return "sales"
-    if re.search(r"\b(recruiter|talent|hr|investigator|abuse investigator|compliance|legal)\b", tl):
+    if re.search(
+        r"\b(recruiter|talent|hr|investigator|abuse investigator|compliance|legal)\b",
+        tl,
+    ):
         return "operations"
-    if re.search(r"\b(software engineer|backend|frontend|full stack|developer|ai engineer|machine learning|data scientist|systems engineer|devops|looker|platform)\b", tl):
+    if re.search(
+        r"\b(software engineer|backend|frontend|full stack|developer|ai engineer|machine learning|data scientist|systems engineer|devops|looker|platform)\b",
+        tl,
+    ):
         return "engineering"
     return "engineering"
 
@@ -198,7 +211,9 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
             missing_required_skills=sorted(required.values()),
             missing_preferred_skills=sorted(preferred.values()),
             relevant_projects=[],
-            learning_opportunities=[_learning(s, True) for s in sorted(required.values())[:3]],
+            learning_opportunities=[
+                _learning(s, True) for s in sorted(required.values())[:3]
+            ],
         )
     required = _skills(job.required_skills)
     preferred = _skills(job.preferred_skills)
@@ -220,7 +235,12 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
     job_domain = get_role_domain(job.title or "")
     # Detect candidate domain
     cand_text = " ".join(user_skills.keys()) + " " + (profile.headline or "").lower()
-    cand_is_eng = bool(re.search(r"\b(python|javascript|react|c\+\+|fastapi|docker|sql|engineer|developer|software)\b", cand_text))
+    cand_is_eng = bool(
+        re.search(
+            r"\b(python|javascript|react|c\+\+|fastapi|docker|sql|engineer|developer|software)\b",
+            cand_text,
+        )
+    )
     if cand_is_eng and job_domain != "engineering":
         fit_score = min(20, max(8, round(raw_score * 0.15)))
     else:

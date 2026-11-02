@@ -66,7 +66,9 @@ class InMemoryRepository:
 
     def delete_application(self, application_id: str) -> bool:
         initial = len(self.applications)
-        self.applications = [item for item in self.applications if item.id != application_id]
+        self.applications = [
+            item for item in self.applications if item.id != application_id
+        ]
         return len(self.applications) < initial
 
 
@@ -102,7 +104,9 @@ class MongoRepository:
         return apps
 
     def get_job(self, job_id: str) -> Job | None:
-        document = self.database.jobs.find_one({"$or": [{"id": job_id}, {"_id": job_id}]})
+        document = self.database.jobs.find_one(
+            {"$or": [{"id": job_id}, {"_id": job_id}]}
+        )
         if not document:
             return None
         if "id" not in document and "_id" in document:
@@ -111,7 +115,9 @@ class MongoRepository:
 
     def add_application(self, application: Application) -> Application:
         data = application.model_dump(mode="json")
-        self.database.applications.update_one({"id": application.id}, {"$set": data}, upsert=True)
+        self.database.applications.update_one(
+            {"id": application.id}, {"$set": data}, upsert=True
+        )
         return application
 
     def update_application(
@@ -120,7 +126,9 @@ class MongoRepository:
         status: ApplicationStatus | None,
         resume_version_id: str | None = None,
     ) -> Application | None:
-        document = self.database.applications.find_one({"$or": [{"id": application_id}, {"_id": application_id}]})
+        document = self.database.applications.find_one(
+            {"$or": [{"id": application_id}, {"_id": application_id}]}
+        )
         if not document:
             return None
         if "id" not in document and "_id" in document:
@@ -131,13 +139,14 @@ class MongoRepository:
         if resume_version_id is not None:
             app_obj.resume_version_id = resume_version_id
         self.database.applications.update_one(
-            {"id": application_id},
-            {"$set": app_obj.model_dump(mode="json")}
+            {"id": application_id}, {"$set": app_obj.model_dump(mode="json")}
         )
         return app_obj
 
     def delete_application(self, application_id: str) -> bool:
-        res = self.database.applications.delete_one({"$or": [{"id": application_id}, {"_id": application_id}]})
+        res = self.database.applications.delete_one(
+            {"$or": [{"id": application_id}, {"_id": application_id}]}
+        )
         return res.deleted_count > 0
 
 

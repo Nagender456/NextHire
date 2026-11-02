@@ -172,4 +172,3 @@ def test_manual_application_crud() -> None:
     service.data.applications[:] = [
         item for item in service.data.applications if item.user_id != user_id
     ]
-
