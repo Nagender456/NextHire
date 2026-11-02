@@ -1099,11 +1099,20 @@ function JobsPage() {
       .then(([nextJobs, nextCompanies, nextProfile, careerSkills, applications]) => {
         setJobs(deduplicateJobsList(nextJobs));
         setCompanies(nextCompanies);
-        const allSkills = [
+        const rawSkills = [
           ...(nextProfile?.skills || []),
           ...(Array.isArray(careerSkills) ? careerSkills.map((s) => s.name) : []),
         ];
-        setProfile({ ...(nextProfile || {}), skills: allSkills });
+        const seenSkills = new Set();
+        const deduplicatedSkills = [];
+        for (const s of rawSkills) {
+          const k = (s || "").trim().toLowerCase();
+          if (k && !seenSkills.has(k)) {
+            seenSkills.add(k);
+            deduplicatedSkills.push(s.trim());
+          }
+        }
+        setProfile({ ...(nextProfile || {}), skills: deduplicatedSkills });
         const dismissed = new Set(nextProfile?.dismissed_job_ids || []);
         setDismissedJobIds(dismissed);
         if (Array.isArray(applications)) {
@@ -1193,6 +1202,8 @@ function JobsPage() {
     }
   };
 
+  const candidateThreshold = profile?.min_fit_score || 50;
+
   // Filter & Sort Jobs
   const filteredJobs = useMemo(() => {
     return deduplicateJobsList(jobs)
@@ -1226,9 +1237,12 @@ function JobsPage() {
         }
 
         // Score filter
+        if (scoreFilter === "threshold" && job.score < candidateThreshold) return false;
         if (scoreFilter === "90" && job.score < 90) return false;
         if (scoreFilter === "80" && job.score < 80) return false;
         if (scoreFilter === "70" && job.score < 70) return false;
+        if (scoreFilter === "60" && job.score < 60) return false;
+        if (scoreFilter === "50" && job.score < 50) return false;
 
         // Location / Mode filter
         if (locationFilter !== "all") {
@@ -1420,6 +1434,19 @@ function JobsPage() {
             onClick={() => { setScoreFilter("all"); setPage(1); }}
           >
             All Matches
+          </button>
+          <button
+            className={`filter-pill ${scoreFilter === "threshold" ? "active" : ""}`}
+            onClick={() => { setScoreFilter("threshold"); setPage(1); }}
+            title={`Filter by your target threshold set in Settings (${candidateThreshold}%)`}
+          >
+            ≥{candidateThreshold}% (Your Threshold)
+          </button>
+          <button
+            className={`filter-pill ${scoreFilter === "50" ? "active" : ""}`}
+            onClick={() => { setScoreFilter("50"); setPage(1); }}
+          >
+            50%+ Fit
           </button>
           <button
             className={`filter-pill ${scoreFilter === "70" ? "active" : ""}`}
@@ -2575,13 +2602,41 @@ function CareerKnowledgeBase({ onProfileSync }) {
       listExternalCandidates(),
     ])
       .then(([nextSkills, nextProjects, nextCandidates]) => {
-        setSkills(nextSkills);
-        setProjects(nextProjects);
-        setCandidates(nextCandidates);
+        setSkills(nextSkills || []);
+        setProjects(nextProjects || []);
+        setCandidates(nextCandidates || []);
         if (onProfileSync) onProfileSync();
       })
       .catch((requestError) => setError(requestError.message));
   };
+
+  const uniqueSkills = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const s of skills) {
+      const key = (s.name || "").trim().toLowerCase();
+      if (!key) continue;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(s);
+      }
+    }
+    return result;
+  }, [skills]);
+
+  const uniqueProjects = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const p of projects) {
+      const key = (p.name || "").trim().toLowerCase();
+      if (!key) continue;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(p);
+      }
+    }
+    return result;
+  }, [projects]);
 
   useEffect(() => {
     refreshKnowledge();
@@ -2704,15 +2759,19 @@ function CareerKnowledgeBase({ onProfileSync }) {
     event.preventDefault();
     action(value)
       .then((nextCandidates) => {
-        setCandidates([...candidates, ...nextCandidates]);
+        setCandidates([...candidates, ...(nextCandidates || [])]);
         clear("");
+        refreshKnowledge();
       })
       .catch((requestError) => setError(requestError.message));
   };
 
   const reviewCandidate = (candidate, status) => {
     reviewExternalCandidate(candidate.id, status)
-      .then((updated) => setCandidates(candidates.map((item) => item.id === updated.id ? updated : item)))
+      .then((updated) => {
+        setCandidates(candidates.map((item) => item.id === updated.id ? updated : item));
+        refreshKnowledge();
+      })
       .catch((requestError) => setError(requestError.message));
   };
 
@@ -2720,7 +2779,10 @@ function CareerKnowledgeBase({ onProfileSync }) {
     const file = event.target.files[0];
     if (!file) return;
     ingestLinkedInDocument(file)
-      .then((nextCandidates) => setCandidates([...candidates, ...nextCandidates]))
+      .then((nextCandidates) => {
+        setCandidates([...candidates, ...(nextCandidates || [])]);
+        refreshKnowledge();
+      })
       .catch((requestError) => setError(requestError.message));
   };
 
@@ -2734,13 +2796,14 @@ function CareerKnowledgeBase({ onProfileSync }) {
     uploadCareerDocument(file)
       .then((nextDocument) => {
         setDocument(nextDocument);
+        refreshKnowledge();
         return listExtractedEntities(nextDocument.id);
       })
       .then((entities) => {
-        setExtracted(entities);
+        setExtracted(entities || []);
         refreshKnowledge();
         if (onProfileSync) onProfileSync();
-        if (entities.length === 0) {
+        if (!entities || entities.length === 0) {
           setError("No section headings or text detected in this file. Try another format or add records manually.");
         }
       })
@@ -2845,7 +2908,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
 
       <div className="section-header-row">
         <div>
-          <h3 style={{ margin: 0 }}>Skills ({skills.length})</h3>
+          <h3 style={{ margin: 0 }}>Skills ({uniqueSkills.length})</h3>
           <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
             Priority indicates alignment weight. Click any priority badge to toggle HIGH / MEDIUM / LOW.
           </span>
@@ -2895,12 +2958,12 @@ function CareerKnowledgeBase({ onProfileSync }) {
       )}
 
       <ul className="entity-list" style={{ marginTop: "10px" }}>
-        {skills.length === 0 && !showAddSkill && (
+        {uniqueSkills.length === 0 && !showAddSkill && (
           <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
             No skills added yet. Click + Add skill to get started.
           </li>
         )}
-        {skills.map((skill) => {
+        {uniqueSkills.map((skill) => {
           if (editingSkillId === skill.id) {
             return (
               <li key={skill.id} style={{ padding: "8px 12px", background: "var(--colors-surface-soft)" }}>
@@ -2982,7 +3045,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
 
       <div className="section-header-row" style={{ marginTop: "1.75rem" }}>
         <div>
-          <h3 style={{ margin: 0 }}>Projects ({projects.length})</h3>
+          <h3 style={{ margin: 0 }}>Projects ({uniqueProjects.length})</h3>
           <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
             Showcase technical scope, technologies used, and measurable results.
           </span>
@@ -3050,12 +3113,12 @@ function CareerKnowledgeBase({ onProfileSync }) {
       )}
 
       <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
-        {projects.length === 0 && !showAddProject && (
+        {uniqueProjects.length === 0 && !showAddProject && (
           <p style={{ color: "var(--colors-steel)", fontSize: "13px", margin: 0 }}>
             No projects added yet. Click + Add project to record one.
           </p>
         )}
-        {projects.map((project) => {
+        {uniqueProjects.map((project) => {
           if (editingProjectId === project.id) {
             return (
               <div key={project.id} style={{ padding: "12px", background: "var(--colors-surface-soft)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
@@ -5261,12 +5324,31 @@ function AnalyticsPage() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    Promise.all([getAnalytics(), getJobs(), getCompanies(), getProfile()])
-      .then(([nextAnalytics, nextJobs, nextCompanies, nextProfile]) => {
+    Promise.all([
+      getAnalytics(),
+      getJobs(),
+      getCompanies(),
+      getProfile().catch(() => null),
+      listCareerEntities("skills").catch(() => []),
+    ])
+      .then(([nextAnalytics, nextJobs, nextCompanies, nextProfile, careerSkills]) => {
         setAnalytics(nextAnalytics);
         setJobs(nextJobs || []);
         setCompanies(nextCompanies || []);
-        setProfile(nextProfile);
+        const rawSkills = [
+          ...(nextProfile?.skills || []),
+          ...(Array.isArray(careerSkills) ? careerSkills.map((s) => s.name) : []),
+        ];
+        const seen = new Set();
+        const deduplicatedSkills = [];
+        for (const s of rawSkills) {
+          const k = (s || "").trim().toLowerCase();
+          if (k && !seen.has(k)) {
+            seen.add(k);
+            deduplicatedSkills.push(s.trim());
+          }
+        }
+        setProfile({ ...(nextProfile || {}), skills: deduplicatedSkills });
       })
       .catch(() => setError(true));
   }, []);
@@ -5275,21 +5357,26 @@ function AnalyticsPage() {
     return profile?.skills || [];
   }, [profile]);
 
-  const matchingJobsList = useMemo(() => {
+  const candidateThreshold = profile?.min_fit_score || 50;
+
+  const scoredJobs = useMemo(() => {
     if (!jobs.length) return [];
     return jobs
       .map((job) => {
         const fit = getJobSkillsAndScore(job, candidateSkills, profile?.headline || "");
         return { ...job, fitScore: fit.score, matchedSkills: fit.matched, missingSkills: fit.missing };
       })
-      .filter((j) => j.fitScore >= 50 || j.matchedSkills?.length > 0)
       .sort((a, b) => b.fitScore - a.fitScore);
   }, [jobs, candidateSkills, profile]);
+
+  const matchingJobsList = useMemo(() => {
+    return scoredJobs.filter((j) => j.fitScore >= candidateThreshold);
+  }, [scoredJobs, candidateThreshold]);
 
   if (error) return <p className="error-message" role="alert">Unable to load analytics.</p>;
   if (!analytics) return <p className="loading-message" role="status">Loading analytics...</p>;
 
-  const matchingCount = analytics.matching_jobs ?? matchingJobsList.length;
+  const matchingCount = matchingJobsList.length;
 
   // Tier 1 metrics (Job Discovery)
   const discoveryMetrics = [
@@ -5302,12 +5389,16 @@ function AnalyticsPage() {
       caption: "Total opportunities ingested & analyzed",
     },
     {
-      label: "Matching Jobs (>70% fit)",
+      label: `Matching Jobs (≥${candidateThreshold}% fit)`,
       value: matchingCount,
       icon: Sparkles,
       trend: matchingCount > 0 ? "High match fit" : "0 fit threshold",
       trendType: matchingCount > 0 ? "positive" : "neutral",
-      caption: "Scored above career alignment threshold",
+      caption: matchingCount > 0
+        ? `Scored at or above your ${candidateThreshold}% alignment threshold`
+        : scoredJobs.length > 0
+          ? `Highest match is ${scoredJobs[0].fitScore}% (${cleanJobTitle(scoredJobs[0].title)})`
+          : `Threshold set at ${candidateThreshold}%`,
     },
     {
       label: "Saved Jobs",
@@ -5394,7 +5485,7 @@ function AnalyticsPage() {
         </div>
 
         {/* High Match Alignment Roles Preview */}
-        {matchingJobsList.length > 0 && (
+        {matchingJobsList.length > 0 ? (
           <div style={{ marginTop: "1.25rem", padding: "14px 16px", background: "var(--colors-surface)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "6px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -5404,7 +5495,7 @@ function AnalyticsPage() {
                 </h4>
               </div>
               <span style={{ fontSize: "12px", color: "var(--colors-slate)" }}>
-                Scored above match threshold using your confirmed skills
+                Scored at or above your {candidateThreshold}% threshold using confirmed skills
               </span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "10px" }}>
@@ -5484,6 +5575,20 @@ function AnalyticsPage() {
               })}
             </div>
           </div>
+        ) : (
+          <div style={{ marginTop: "1.25rem", padding: "16px 18px", background: "var(--colors-surface)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+              <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
+              <h4 style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>
+                No Roles Currently Reach Your {candidateThreshold}% Match Threshold
+              </h4>
+            </div>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)", lineHeight: 1.5 }}>
+              {scoredJobs.length > 0
+                ? `Your top scoring opportunity is currently ${cleanJobTitle(scoredJobs[0].title)} at ${scoredJobs[0].fitScore}% match. You can customize your threshold in Settings (to 50% or 60%) or confirm additional skills in your Career Knowledge Base to align with open vacancies.`
+                : "No job opportunities available to match yet. Explore Job Feed or trigger Naukri live scraping to discover roles."}
+            </p>
+          </div>
         )}
       </section>
 
@@ -5530,7 +5635,7 @@ function AnalyticsPage() {
             <h3 className="widget-title">Top Missing Skills</h3>
             <span className="widget-tag">Skill Gap Analytics</span>
           </div>
-          {analytics.skill_gaps.length === 0 ? (
+          {(!analytics.skill_gaps || analytics.skill_gaps.length === 0) ? (
             <div className="skill-gap-empty-state">
               <div className="empty-state-icon-wrap">
                 <TrendingUp size={22} />
@@ -5563,8 +5668,8 @@ function AnalyticsPage() {
             </div>
           ) : (
             <div className="skill-gap-progress-list">
-              {analytics.skill_gaps.map((gap) => {
-                const maxJobs = Math.max(...analytics.skill_gaps.map((g) => g.jobs), 1);
+              {(analytics.skill_gaps || []).map((gap) => {
+                const maxJobs = Math.max(...(analytics.skill_gaps || []).map((g) => g.jobs), 1);
                 const percent = Math.min(Math.round((gap.jobs / maxJobs) * 100), 100);
                 return (
                   <div className="skill-gap-row" key={gap.skill}>
@@ -5686,17 +5791,24 @@ function SettingsPage({ user }) {
     getPrivacySettings().then(setPrivacy).catch(() => {});
     getProfile()
       .then((p) => {
+        if (!p) return;
         setProfile(p);
         if (p.display_name) setDisplayName(p.display_name);
         if (p.preferred_roles?.length) setPreferredRoles(p.preferred_roles.join(", "));
         if (p.preferred_locations?.length) setPreferredLocations(p.preferred_locations.join(", "));
         if (p.target_companies?.length) setTargetCompanies(p.target_companies.join(", "));
+        if (p.work_modality) setWorkModality(p.work_modality);
+        if (p.min_fit_score != null) setMinFitScore(p.min_fit_score);
+        if (p.default_resume_template) setDefaultTemplate(p.default_resume_template);
+        if (p.notify_matching_jobs != null) setNotifyMatchingJobs(p.notify_matching_jobs);
+        if (p.notify_deadlines != null) setNotifyDeadlines(p.notify_deadlines);
+        if (p.notify_weekly_digest != null) setNotifyWeeklyDigest(p.notify_weekly_digest);
       })
       .catch(() => {});
   }, []);
 
   const handleSaveProfile = (event) => {
-    event.preventDefault();
+    if (event) event.preventDefault();
     setSavingProfile(true);
     setProfileError("");
     setProfileNotice("");
@@ -5719,6 +5831,12 @@ function SettingsPage({ user }) {
       preferred_roles: rolesList,
       preferred_locations: locationsList,
       target_companies: companiesList,
+      work_modality: workModality,
+      min_fit_score: minFitScore,
+      default_resume_template: defaultTemplate,
+      notify_matching_jobs: notifyMatchingJobs,
+      notify_deadlines: notifyDeadlines,
+      notify_weekly_digest: notifyWeeklyDigest,
     })
       .then((updated) => {
         setProfile(updated);
@@ -5729,6 +5847,55 @@ function SettingsPage({ user }) {
         setProfileError(err.message || "Failed to update profile settings.");
       })
       .finally(() => setSavingProfile(false));
+  };
+
+  const handleUpdateThreshold = (score) => {
+    setMinFitScore(score);
+    setProfileError("");
+    updateProfile({ min_fit_score: score })
+      .then((updated) => {
+        setProfile(updated);
+        setProfileNotice(`✓ Minimum match threshold set to ${score}% and saved.`);
+        setTimeout(() => setProfileNotice(""), 3500);
+      })
+      .catch((err) => {
+        setProfileError(err.message || "Failed to save match threshold.");
+      });
+  };
+
+  const handleUpdateModality = (modality) => {
+    setWorkModality(modality);
+    updateProfile({ work_modality: modality })
+      .then((updated) => {
+        setProfile(updated);
+        setProfileNotice(`✓ Work modality updated to ${modality}.`);
+        setTimeout(() => setProfileNotice(""), 3000);
+      })
+      .catch(() => {});
+  };
+
+  const handleUpdateTemplate = (tmpl) => {
+    setDefaultTemplate(tmpl);
+    updateProfile({ default_resume_template: tmpl })
+      .then((updated) => {
+        setProfile(updated);
+        setProfileNotice(`✓ Resume template updated to ${tmpl}.`);
+        setTimeout(() => setProfileNotice(""), 3000);
+      })
+      .catch(() => {});
+  };
+
+  const handleToggleNotification = (key, value) => {
+    if (key === "notify_matching_jobs") setNotifyMatchingJobs(value);
+    if (key === "notify_deadlines") setNotifyDeadlines(value);
+    if (key === "notify_weekly_digest") setNotifyWeeklyDigest(value);
+    updateProfile({ [key]: value })
+      .then((updated) => {
+        setProfile(updated);
+        setProfileNotice("✓ Notification preferences updated.");
+        setTimeout(() => setProfileNotice(""), 3000);
+      })
+      .catch(() => {});
   };
 
   const handleExport = () => {
@@ -5875,7 +6042,7 @@ function SettingsPage({ user }) {
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setWorkModality(m.id)}
+                  onClick={() => handleUpdateModality(m.id)}
                   style={{
                     padding: "6px 14px",
                     borderRadius: "6px",
@@ -5917,14 +6084,14 @@ function SettingsPage({ user }) {
                 Minimum Match Fit Threshold
               </span>
               <p style={{ margin: "2px 0 8px 0", fontSize: "12px", color: "var(--colors-slate)" }}>
-                Roles scoring at or above this threshold appear in your curated feeds and matching jobs analytics.
+                Roles scoring at or above this threshold appear in your curated feeds and matching jobs analytics. Click any percentage to update.
               </p>
               <div style={{ display: "flex", gap: "6px" }}>
                 {[50, 60, 70, 80].map((score) => (
                   <button
                     key={score}
                     type="button"
-                    onClick={() => setMinFitScore(score)}
+                    onClick={() => handleUpdateThreshold(score)}
                     style={{
                       flex: 1,
                       padding: "5px 0",
@@ -5952,13 +6119,24 @@ function SettingsPage({ user }) {
               </p>
               <select
                 value={defaultTemplate}
-                onChange={(e) => setDefaultTemplate(e.target.value)}
+                onChange={(e) => handleUpdateTemplate(e.target.value)}
                 style={{ width: "100%", padding: "7px 10px", fontSize: "13px", borderRadius: "6px", border: "1px solid var(--colors-hairline)" }}
               >
                 <option value="default">Clean Single-Column (General Software / Standard)</option>
                 <option value="technical">Technical Skills-Forward (Engineering & SRE)</option>
               </select>
             </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => handleUpdateThreshold(minFitScore)}
+              style={{ padding: "7px 18px", fontSize: "13px" }}
+            >
+              Save AI Parameters
+            </button>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", borderRadius: "6px", background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.2)" }}>
@@ -5984,7 +6162,7 @@ function SettingsPage({ user }) {
             <input
               type="checkbox"
               checked={notifyMatchingJobs}
-              onChange={(e) => setNotifyMatchingJobs(e.target.checked)}
+              onChange={(e) => handleToggleNotification("notify_matching_jobs", e.target.checked)}
               style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
             />
             <span>Instant email alerts when a new job posting aligns with your skills (&gt;{minFitScore}% fit)</span>
@@ -5993,7 +6171,7 @@ function SettingsPage({ user }) {
             <input
               type="checkbox"
               checked={notifyDeadlines}
-              onChange={(e) => setNotifyDeadlines(e.target.checked)}
+              onChange={(e) => handleToggleNotification("notify_deadlines", e.target.checked)}
               style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
             />
             <span>Application pipeline reminders (upcoming interviews, post-interview thank you follow-ups)</span>
@@ -6002,7 +6180,7 @@ function SettingsPage({ user }) {
             <input
               type="checkbox"
               checked={notifyWeeklyDigest}
-              onChange={(e) => setNotifyWeeklyDigest(e.target.checked)}
+              onChange={(e) => handleToggleNotification("notify_weekly_digest", e.target.checked)}
               style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
             />
             <span>Weekly market trend digest and skill demand gap report</span>

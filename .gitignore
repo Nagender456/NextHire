@@ -18,4 +18,5 @@ dist/
 coverage/
 *.log
 services/*/data/
-
+*.pdf
+test_resume.pdf

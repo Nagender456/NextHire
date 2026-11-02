@@ -7,7 +7,8 @@ from app.services import service
 
 
 def get_user_analytics(user_id: str) -> UserAnalytics:
-    if not auth_store.privacy_settings[user_id].get("analytics_enabled", True):
+    privacy = auth_store.privacy_settings.get(user_id, {"analytics_enabled": True})
+    if not privacy.get("analytics_enabled", True):
         return UserAnalytics(
             target_companies=auth_store.get_profile(user_id).target_companies
         )
@@ -29,11 +30,12 @@ def get_user_analytics(user_id: str) -> UserAnalytics:
     raw_user_skills = list(profile.skills) + ckb_skills + list(profile.preferred_skills.keys())
     user_skills_set = {normalize_skill(s) for s in raw_user_skills if s.strip()}
 
+    threshold = getattr(profile, "min_fit_score", None) or 50
     matching_jobs = 0
     gaps: Counter[str] = Counter()
     for job in jobs:
         intel = analyze_job(user_id, job)
-        if intel.fit_score >= 50 or bool(intel.matched_required_skills):
+        if intel.fit_score >= threshold:
             matching_jobs += 1
         for missing_s in intel.missing_required_skills:
             if normalize_skill(missing_s) not in user_skills_set:

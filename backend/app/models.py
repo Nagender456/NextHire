@@ -46,6 +46,12 @@ class CareerProfile(BaseModel):
     preferred_locations: list[str] = Field(default_factory=list)
     target_companies: list[str] = Field(default_factory=list)
     dismissed_job_ids: list[str] = Field(default_factory=list)
+    min_fit_score: int = 50
+    work_modality: str = "remote"
+    default_resume_template: str = "default"
+    notify_matching_jobs: bool = True
+    notify_deadlines: bool = True
+    notify_weekly_digest: bool = False
 
 
 class ProfileUpdate(BaseModel):
@@ -58,6 +64,12 @@ class ProfileUpdate(BaseModel):
     preferred_locations: list[str] | None = None
     target_companies: list[str] | None = None
     dismissed_job_ids: list[str] | None = None
+    min_fit_score: int | None = None
+    work_modality: str | None = None
+    default_resume_template: str | None = None
+    notify_matching_jobs: bool | None = None
+    notify_deadlines: bool | None = None
+    notify_weekly_digest: bool | None = None
 
 
 class CareerEntity(BaseModel):

@@ -322,10 +322,12 @@ class AuthStore:
                 self.session_expires_at.pop(token, None)
 
     def get_profile(self, user_id: str) -> CareerProfile:
+        if user_id not in self.profiles:
+            self.profiles[user_id] = CareerProfile(user_id=user_id)
         return self.profiles[user_id]
 
     def update_profile(self, user_id: str, changes: ProfileUpdate) -> CareerProfile:
-        current = self.profiles[user_id]
+        current = self.get_profile(user_id)
         updates = changes.model_dump(exclude_unset=True, exclude_none=True)
         updated = current.model_copy(update=updates)
         self.profiles[user_id] = updated
@@ -366,8 +368,27 @@ class AuthStore:
                 e["name"] = e.get("title") or "Skill"
         return e
 
+    def _ensure_career_entities(self, user_id: str) -> None:
+        if user_id not in self.career_entities:
+            self.career_entities[user_id] = {
+                "skills": {},
+                "projects": {},
+                "experience": {},
+                "education": {},
+                "certifications": {},
+                "achievements": {},
+            }
+        for k in ("skills", "projects", "experience", "education", "certifications", "achievements"):
+            if k not in self.career_entities[user_id]:
+                self.career_entities[user_id][k] = {}
+
+    def _ensure_external_candidates(self, user_id: str) -> None:
+        if user_id not in self.external_candidates:
+            self.external_candidates[user_id] = {}
+
     def list_entities(self, user_id: str, entity_type: str) -> list[dict[str, Any]]:
-        raw = self.career_entities[user_id][entity_type]
+        self._ensure_career_entities(user_id)
+        raw = self.career_entities[user_id].get(entity_type, {})
         sanitized = []
         for k, v in list(raw.items()):
             fixed = self._sanitize_entity(entity_type, v)
@@ -378,11 +399,56 @@ class AuthStore:
     def create_entity(
         self, user_id: str, entity_type: str, values: dict[str, Any]
     ) -> dict[str, Any]:
+        self._ensure_career_entities(user_id)
+        sanitized = self._sanitize_entity(entity_type, values)
         now = datetime.now(UTC)
+
+        # Deduplication / Anti-clash check
+        if entity_type == "skills":
+            target_name = (sanitized.get("name") or "").strip().lower()
+            if target_name:
+                for existing in self.career_entities[user_id]["skills"].values():
+                    if (existing.get("name") or "").strip().lower() == target_name:
+                        if sanitized.get("priority"):
+                            existing["priority"] = sanitized["priority"]
+                        existing["updated_at"] = now
+                        return existing
+
+        elif entity_type == "projects":
+            target_name = (sanitized.get("name") or "").strip().lower()
+            if target_name:
+                for existing in self.career_entities[user_id]["projects"].values():
+                    if (existing.get("name") or "").strip().lower() == target_name:
+                        existing.update({k: v for k, v in sanitized.items() if v})
+                        existing["updated_at"] = now
+                        return existing
+
+        elif entity_type == "certifications":
+            target_name = (sanitized.get("name") or "").strip().lower()
+            if target_name:
+                for existing in self.career_entities[user_id]["certifications"].values():
+                    if (existing.get("name") or "").strip().lower() == target_name:
+                        existing.update({k: v for k, v in sanitized.items() if v})
+                        existing["updated_at"] = now
+                        return existing
+
+        elif entity_type == "experience":
+            target_comp = (sanitized.get("company") or "").strip().lower()
+            target_title = (sanitized.get("title") or "").strip().lower()
+            if target_comp and target_title:
+                for existing in self.career_entities[user_id]["experience"].values():
+                    if (
+                        (existing.get("company") or "").strip().lower() == target_comp
+                        and (existing.get("title") or "").strip().lower() == target_title
+                    ):
+                        existing.update({k: v for k, v in sanitized.items() if v})
+                        existing["updated_at"] = now
+                        return existing
+
         entity = {
             "id": f"{entity_type[:-1]}-{len(self.career_entities[user_id][entity_type]) + 1}",
             "user_id": user_id,
-            **self._sanitize_entity(entity_type, values),
+            **sanitized,
             "created_at": now,
             "updated_at": now,
         }
@@ -392,7 +458,8 @@ class AuthStore:
     def update_entity(
         self, user_id: str, entity_type: str, entity_id: str, values: dict[str, Any]
     ) -> dict[str, Any] | None:
-        entity = self.career_entities[user_id][entity_type].get(entity_id)
+        self._ensure_career_entities(user_id)
+        entity = self.career_entities[user_id].get(entity_type, {}).get(entity_id)
         if entity is None:
             return None
         entity.update(values)
@@ -400,13 +467,15 @@ class AuthStore:
         return entity
 
     def delete_entity(self, user_id: str, entity_type: str, entity_id: str) -> bool:
+        self._ensure_career_entities(user_id)
         return (
-            self.career_entities[user_id][entity_type].pop(entity_id, None) is not None
+            self.career_entities[user_id].get(entity_type, {}).pop(entity_id, None) is not None
         )
 
     def add_external_candidate(
         self, user_id: str, values: dict[str, Any]
     ) -> dict[str, Any]:
+        self._ensure_external_candidates(user_id)
         candidate = {
             "id": f"candidate-{len(self.external_candidates[user_id]) + 1}",
             "user_id": user_id,
@@ -418,11 +487,13 @@ class AuthStore:
         return candidate
 
     def list_external_candidates(self, user_id: str) -> list[dict[str, Any]]:
+        self._ensure_external_candidates(user_id)
         return list(self.external_candidates[user_id].values())
 
     def update_external_candidate(
         self, user_id: str, candidate_id: str, status: ExternalCandidateStatus
     ) -> dict[str, Any] | None:
+        self._ensure_external_candidates(user_id)
         candidate = self.external_candidates[user_id].get(candidate_id)
         if candidate is None:
             return None

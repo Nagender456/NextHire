@@ -619,7 +619,7 @@ def sync_extracted_entity_to_career_knowledge(
                     "confirmed_by_user": True,
                 },
             )
-            if s_clean not in combined_skills:
+            if not any(cs.lower().strip() == s_clean.lower().strip() for cs in combined_skills):
                 combined_skills.append(s_clean)
         auth_store.profiles[user_id] = current_profile.model_copy(
             update={"skills": combined_skills}
@@ -768,6 +768,8 @@ async def upload_document(
 
     for extracted in entities:
         auth_store.add_extracted_entity(user.id, document["id"], extracted)
+        # Automatically populate Career Knowledge Base with extracted findings
+        sync_extracted_entity_to_career_knowledge(user.id, document["id"], extracted)
 
     # Auto-enrich profile skills and headline with extracted findings
     current_profile = auth_store.get_profile(user.id)
@@ -794,12 +796,12 @@ async def upload_document(
     current_skills = list(current_profile.skills or [])
     for s in extracted_skills:
         s_clean = s.strip()
-        if s_clean and s_clean not in current_skills:
+        if s_clean and not any(cs.lower().strip() == s_clean.lower().strip() for cs in current_skills):
             current_skills.append(s_clean)
 
     profile_updates = {}
     if current_skills != current_profile.skills:
-        profile_updates["skills"] = current_skills[:30]
+        profile_updates["skills"] = current_skills[:40]
     if (not current_profile.headline) and extracted_headline:
         profile_updates["headline"] = extracted_headline[:80]
 

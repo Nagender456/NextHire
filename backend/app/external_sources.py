@@ -24,7 +24,11 @@ class SourceFetchError(ValueError):
     pass
 
 
-def _fetch(url: str, accept: str = "text/html") -> bytes:
+def _fetch(
+    url: str,
+    accept: str = "text/html",
+    extra_headers: dict[str, str] | None = None,
+) -> bytes:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise SourceFetchError("SOURCE_URL_INVALID")
@@ -47,9 +51,15 @@ def _fetch(url: str, accept: str = "text/html") -> bytes:
         for address in addresses
     ):
         raise SourceFetchError("SOURCE_URL_BLOCKED")
+    req_headers = {
+        "Accept": accept,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NextHire/1.0",
+    }
+    if extra_headers:
+        req_headers.update(extra_headers)
     request = Request(
         url,
-        headers={"Accept": accept, "User-Agent": "NextHire/1.0"},
+        headers=req_headers,
     )
     try:
         with urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
@@ -74,58 +84,125 @@ def _github_candidates(payload: list[dict[str, object]], username: str) -> list[
             if isinstance(language_data, dict)
             else []
         )
+        if not languages and repo.get("language"):
+            languages = [str(repo["language"])]
         description = str(repo.get("description") or "").strip()
         readme = str(repo.get("readme") or "").strip()
         candidates.append(
             {
                 "source_id": f"{username}/{name}",
-                "source_url": repo.get("html_url"),
+                "source_url": repo.get("html_url") or f"https://github.com/{username}/{name}",
                 "entity_type": "projects",
                 "data": {
                     "name": name,
                     "description": f"{description}\n\n{readme}".strip(),
                     "technologies": sorted(set(topics + languages)),
-                    "url": str(repo.get("html_url") or ""),
+                    "url": str(repo.get("html_url") or f"https://github.com/{username}/{name}"),
                 },
             }
         )
     return candidates
 
 
+def _fetch_github_html(username: str) -> list[dict]:
+    url = f"https://github.com/{username}?tab=repositories"
+    try:
+        html = _fetch(url, "text/html").decode("utf-8", errors="replace")
+    except Exception as error:
+        raise SourceFetchError("SOURCE_UNAVAILABLE") from error
+
+    items = re.findall(r'<li class="col-12 d-flex[^"]*">(.*?)</li>', html, re.DOTALL)
+    if not items:
+        items = re.findall(r'<li[^>]*itemprop="owns"[^>]*>(.*?)</li>', html, re.DOTALL)
+
+    payload = []
+    for item in items:
+        name_m = re.search(r'itemprop="name codeRepository"[^>]*>\s*([^\s<]+)', item)
+        if not name_m:
+            continue
+        name = name_m.group(1).strip()
+        desc_m = re.search(r'itemprop="description"[^>]*>\s*([^<]+)', item)
+        desc = desc_m.group(1).strip() if desc_m else ""
+        lang_m = re.search(r'itemprop="programmingLanguage"[^>]*>\s*([^<]+)', item)
+        lang = lang_m.group(1).strip() if lang_m else ""
+        topics = [
+            t.strip()
+            for t in re.findall(r'class="topic-tag[^"]*"[^>]*>\s*([^<]+)', item)
+            if t.strip()
+        ]
+        payload.append(
+            {
+                "name": name,
+                "description": desc,
+                "language": lang,
+                "topics": topics,
+                "html_url": f"https://github.com/{username}/{name}",
+            }
+        )
+
+    if not payload:
+        # Check if user profile exists
+        try:
+            _fetch(f"https://github.com/{username}", "text/html")
+            return []
+        except Exception:
+            raise SourceFetchError("SOURCE_UNAVAILABLE")
+
+    return _github_candidates(payload, username)
+
+
 def fetch_github(request: GitHubSourceRequest) -> list[dict]:
+    import os
+
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    extra_headers = {"Authorization": f"Bearer {token}"} if token else None
     url = f"https://api.github.com/users/{request.username}/repos?per_page=100"
     try:
-        payload = json.loads(_fetch(url, "application/vnd.github+json"))
-    except json.JSONDecodeError as error:
-        raise SourceFetchError("SOURCE_INVALID_RESPONSE") from error
-    if not isinstance(payload, list):
-        raise SourceFetchError("SOURCE_INVALID_RESPONSE")
-    for repo in payload[:20]:
-        languages_url = repo.get("languages_url")
-        if isinstance(languages_url, str):
-            try:
-                languages = json.loads(
-                    _fetch(languages_url, "application/vnd.github+json")
-                )
-                if isinstance(languages, dict):
-                    repo["languages"] = languages
-            except (SourceFetchError, json.JSONDecodeError):
-                repo["languages"] = {}
-        readme_url = repo.get("contents_url")
-        if isinstance(readme_url, str):
-            try:
-                readme_payload = json.loads(
-                    _fetch(f"{readme_url}/README", "application/vnd.github+json")
-                )
-                if isinstance(readme_payload, dict):
-                    encoded = readme_payload.get("content", "")
-                    if isinstance(encoded, str):
-                        repo["readme"] = base64.b64decode(encoded).decode(
-                            "utf-8", errors="replace"
-                        )[:4000]
-            except (SourceFetchError, json.JSONDecodeError, ValueError):
-                repo["readme"] = ""
-    return _github_candidates(payload, request.username)
+        if extra_headers:
+            raw = _fetch(url, "application/vnd.github+json", extra_headers=extra_headers)
+        else:
+            raw = _fetch(url, "application/vnd.github+json")
+        payload = json.loads(raw)
+        if not isinstance(payload, list):
+            raise SourceFetchError("SOURCE_INVALID_RESPONSE")
+
+        for repo in payload[:20]:
+            languages_url = repo.get("languages_url")
+            if isinstance(languages_url, str):
+                try:
+                    if extra_headers:
+                        lang_raw = _fetch(languages_url, "application/vnd.github+json", extra_headers=extra_headers)
+                    else:
+                        lang_raw = _fetch(languages_url, "application/vnd.github+json")
+                    languages = json.loads(lang_raw)
+                    if isinstance(languages, dict):
+                        repo["languages"] = languages
+                except Exception:
+                    repo["languages"] = {}
+            readme_url = repo.get("contents_url")
+            if isinstance(readme_url, str):
+                try:
+                    if extra_headers:
+                        readme_raw = _fetch(f"{readme_url}/README", "application/vnd.github+json", extra_headers=extra_headers)
+                    else:
+                        readme_raw = _fetch(f"{readme_url}/README", "application/vnd.github+json")
+                    readme_payload = json.loads(readme_raw)
+                    if isinstance(readme_payload, dict):
+                        encoded = readme_payload.get("content", "")
+                        if isinstance(encoded, str):
+                            repo["readme"] = base64.b64decode(encoded).decode(
+                                "utf-8", errors="replace"
+                            )[:4000]
+                except Exception:
+                    repo["readme"] = ""
+        return _github_candidates(payload, request.username)
+    except Exception as exc:
+        # If unauthenticated GitHub API is rate-limited (403) or fails, fallback to HTML scraping
+        try:
+            return _fetch_github_html(request.username)
+        except Exception:
+            raise SourceFetchError("SOURCE_UNAVAILABLE") from exc
+
 
 
 class _ReadableTextParser(HTMLParser):
