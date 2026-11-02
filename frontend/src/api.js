@@ -1,5 +1,5 @@
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? "";
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
@@ -16,14 +16,8 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-export async function getDashboard() {
-  const response = await fetchWithTimeout(`${apiBaseUrl}/api/v1/dashboard`, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error(`Dashboard request failed with ${response.status}`);
-  }
-  return response.json();
+export function getDashboard() {
+  return request("/api/v1/dashboard");
 }
 
 export function getAnalytics() {

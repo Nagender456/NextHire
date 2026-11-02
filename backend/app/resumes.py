@@ -28,6 +28,7 @@ def validate_format(content: ResumeContent) -> ResumeContent:
 
 
 def _confirmed_entities(user_id: str, entity_type: str) -> list[dict]:
+    auth_store._ensure_career_entities(user_id)
     return [
         entity
         for entity in auth_store.career_entities[user_id][entity_type].values()
@@ -131,6 +132,7 @@ def generate_resume(user_id: str, job: Job) -> ResumeContent:
 
 
 def validate_content(user_id: str, content: ResumeContent) -> ResumeContent:
+    auth_store._ensure_career_entities(user_id)
     known_ids = {
         entity["id"]
         for entities in auth_store.career_entities[user_id].values()

@@ -1775,6 +1775,7 @@ async def update_privacy_settings(
 @router.get("/privacy/export", response_model=UserDataExport)
 async def export_user_data(user: User = Depends(require_user)) -> UserDataExport:
     admin_store.audit(user.id, "user_data_exported", "user", user.id)
+    auth_store._ensure_career_entities(user.id)
     return UserDataExport(
         exported_at=datetime.now(UTC),
         user=user,

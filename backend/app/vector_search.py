@@ -213,6 +213,7 @@ class PersonalizedSearch:
     def index_user(self, user_id: str) -> int:
         self.index.delete_user(user_id)
         profile = auth_store.get_profile(user_id)
+        auth_store._ensure_career_entities(user_id)
         entities = [
             entity
             for entity_group in auth_store.career_entities[user_id].values()

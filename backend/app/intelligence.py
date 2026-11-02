@@ -175,6 +175,7 @@ def get_role_domain(title: str) -> str:
 
 def analyze_job(user_id: str, job: Job) -> JobIntelligence:
     profile = auth_store.get_profile(user_id)
+    auth_store._ensure_career_entities(user_id)
     entities = auth_store.career_entities[user_id]
     user_skills = _skills(profile.skills)
     user_skills.update(

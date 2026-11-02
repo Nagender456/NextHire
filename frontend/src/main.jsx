@@ -4776,6 +4776,18 @@ function FoundationStatus() {
   );
 }
 
+const isBogusTitle = (t = "") => {
+  const l = (t || "").toLowerCase();
+  return (
+    l.includes("home home") ||
+    l.includes("cookie") ||
+    l.includes("saved jobs") ||
+    l.includes("privacy statement") ||
+    l.includes("accessibility") ||
+    l.includes("read more")
+  );
+};
+
 function DashboardContent({ dashboard, error, onReload, user }) {
   const [seeding, setSeeding] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -4794,6 +4806,46 @@ function DashboardContent({ dashboard, error, onReload, user }) {
     (dashboard?.applications || []).forEach((a) => m.set(a.job_id, a));
     return m;
   });
+
+  useEffect(() => {
+    getCompanies()
+      .then(setCompanies)
+      .catch(() => {});
+  }, []);
+
+  const profile = dashboard?.profile || {};
+  const userSkills = profile?.skills || [];
+
+  const recommendedJobs = useMemo(() => {
+    if (!dashboard) return [];
+    const list = deduplicateJobsList(dashboard.recommended_jobs || [])
+      .filter((j) => !isBogusTitle(j.title) && !dismissedJobIds.has(j.id));
+
+    return list
+      .map((job) => {
+        const skillsInfo = getJobSkillsAndScore(
+          job,
+          userSkills,
+          profile?.headline || ""
+        );
+        return {
+          ...job,
+          skillsInfo,
+          score: skillsInfo.score,
+        };
+      })
+      .sort((a, b) => {
+        // Highest matching jobs on top (descending)
+        if (b.score !== a.score) return b.score - a.score;
+        const aMatched = a.skillsInfo?.matched?.length || 0;
+        const bMatched = b.skillsInfo?.matched?.length || 0;
+        if (bMatched !== aMatched) return bMatched - aMatched;
+        const dateA = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+        const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+  }, [dashboard, dismissedJobIds, userSkills, profile?.headline]);
 
   const handleTailorJob = (job) => {
     setTailoringId(job.id);
@@ -4824,20 +4876,6 @@ function DashboardContent({ dashboard, error, onReload, user }) {
         setNoticeType("error");
       });
   };
-
-  useEffect(() => {
-    getCompanies()
-      .then(setCompanies)
-      .catch(() => {});
-  }, []);
-
-  if (error) {
-    return <p className="error-message" role="alert">Unable to load your dashboard.</p>;
-  }
-
-  if (!dashboard) {
-    return <p className="loading-message" role="status">Loading your dashboard...</p>;
-  }
 
   const handleSeed = () => {
     setSeeding(true);
@@ -4879,9 +4917,26 @@ function DashboardContent({ dashboard, error, onReload, user }) {
       });
   };
 
+  if (error) {
+    return (
+      <div className="error-message" role="alert" style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-start", padding: "16px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)" }}>
+        <p style={{ margin: 0, fontWeight: 600, color: "var(--colors-ink)" }}>Unable to load your dashboard.</p>
+        <p style={{ margin: 0, fontSize: "13px", color: "var(--colors-slate)" }}>If the cloud backend is waking up from idle, please try again.</p>
+        {onReload && (
+          <button className="primary-button" onClick={onReload} style={{ fontSize: "13px", padding: "6px 14px", marginTop: "4px" }}>
+            Retry Loading Dashboard
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (!dashboard) {
+    return <p className="loading-message" role="status">Loading your dashboard...</p>;
+  }
+
   const userName = user?.display_name ? user.display_name.split(" ")[0] : "Alex";
   const completeness = dashboard.profile_completeness ?? 0;
-  const profile = dashboard.profile || {};
 
   // Calculate connected knowledge sources
   const connectedSourcesCount = [
@@ -4897,51 +4952,6 @@ function DashboardContent({ dashboard, error, onReload, user }) {
   const appliedCount = applications.filter((a) => a.status === "applied").length;
   const interviewCount = applications.filter((a) => a.status === "interview" || a.status === "interviewing").length;
   const offerCount = applications.filter((a) => a.status === "offer").length;
-
-  // Filter recommended jobs to remove bogus non-job titles and dismissed roles
-  const isBogusTitle = (t = "") => {
-    const l = t.toLowerCase();
-    return (
-      l.includes("home home") ||
-      l.includes("cookie") ||
-      l.includes("saved jobs") ||
-      l.includes("privacy statement") ||
-      l.includes("accessibility") ||
-      l.includes("read more")
-    );
-  };
-
-  const userSkills = profile?.skills || [];
-
-  const recommendedJobs = useMemo(() => {
-    const list = deduplicateJobsList(dashboard.recommended_jobs || [])
-      .filter((j) => !isBogusTitle(j.title) && !dismissedJobIds.has(j.id));
-
-    return list
-      .map((job) => {
-        const skillsInfo = getJobSkillsAndScore(
-          job,
-          userSkills,
-          profile?.headline || ""
-        );
-        return {
-          ...job,
-          skillsInfo,
-          score: skillsInfo.score,
-        };
-      })
-      .sort((a, b) => {
-        // Highest matching jobs on top (descending)
-        if (b.score !== a.score) return b.score - a.score;
-        const aMatched = a.skillsInfo?.matched?.length || 0;
-        const bMatched = b.skillsInfo?.matched?.length || 0;
-        if (bMatched !== aMatched) return bMatched - aMatched;
-        const dateA = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
-        const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
-        if (dateB !== dateA) return dateB - dateA;
-        return (a.title || "").localeCompare(b.title || "");
-      });
-  }, [dashboard.recommended_jobs, dismissedJobIds, userSkills, profile?.headline]);
 
   return (
     <div className="career-overview-container">
