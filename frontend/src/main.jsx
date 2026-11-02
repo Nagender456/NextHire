@@ -1250,12 +1250,22 @@ function JobsPage() {
         return true;
       })
       .sort((a, b) => {
-        if (sortBy === "highest_match") return b.score - a.score;
+        if (sortBy === "highest_match") {
+          if (b.score !== a.score) return b.score - a.score;
+          const aMatched = a.matched?.length || 0;
+          const bMatched = b.matched?.length || 0;
+          if (bMatched !== aMatched) return bMatched - aMatched;
+          const dateA = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+          const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+          if (dateB !== dateA) return dateB - dateA;
+          return (a.title || "").localeCompare(b.title || "");
+        }
         if (sortBy === "company") return a.companyName.localeCompare(b.companyName);
         if (sortBy === "recent") {
           const dateA = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
           const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
-          return dateB - dateA;
+          if (dateB !== dateA) return dateB - dateA;
+          return b.score - a.score;
         }
         return 0;
       });
@@ -4837,9 +4847,37 @@ function DashboardContent({ dashboard, error, onReload, user }) {
     );
   };
 
-  const rawRecommended = deduplicateJobsList(dashboard.recommended_jobs || [])
-    .filter((j) => !isBogusTitle(j.title) && !dismissedJobIds.has(j.id));
   const userSkills = profile?.skills || [];
+
+  const recommendedJobs = useMemo(() => {
+    const list = deduplicateJobsList(dashboard.recommended_jobs || [])
+      .filter((j) => !isBogusTitle(j.title) && !dismissedJobIds.has(j.id));
+
+    return list
+      .map((job) => {
+        const skillsInfo = getJobSkillsAndScore(
+          job,
+          userSkills,
+          profile?.headline || ""
+        );
+        return {
+          ...job,
+          skillsInfo,
+          score: skillsInfo.score,
+        };
+      })
+      .sort((a, b) => {
+        // Highest matching jobs on top (descending)
+        if (b.score !== a.score) return b.score - a.score;
+        const aMatched = a.skillsInfo?.matched?.length || 0;
+        const bMatched = b.skillsInfo?.matched?.length || 0;
+        if (bMatched !== aMatched) return bMatched - aMatched;
+        const dateA = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+        const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+  }, [dashboard.recommended_jobs, dismissedJobIds, userSkills, profile?.headline]);
 
   return (
     <div className="career-overview-container">
@@ -5000,7 +5038,7 @@ function DashboardContent({ dashboard, error, onReload, user }) {
           )}
         </div>
 
-        {rawRecommended.length === 0 ? (
+        {recommendedJobs.length === 0 ? (
           <div className="empty-state" style={{ padding: "2.5rem 1rem", textAlign: "center" }}>
             <p style={{ margin: "0 0 0.5rem", fontWeight: 600, color: "var(--colors-ink)" }}>
               {dashboard.jobs_discovered === 0
@@ -5025,10 +5063,10 @@ function DashboardContent({ dashboard, error, onReload, user }) {
           </div>
         ) : (
           <div className="recommended-jobs-list">
-            {rawRecommended.map((job) => {
+            {recommendedJobs.map((job) => {
               const companyDetails = getCompanyDetails(job.company_id, companies);
               const cleanedTitle = cleanJobTitle(job.title);
-              const { matched, missing, score } = getJobSkillsAndScore(
+              const { matched, missing, score } = job.skillsInfo || getJobSkillsAndScore(
                 job,
                 userSkills,
                 profile?.headline || ""

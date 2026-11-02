@@ -177,25 +177,24 @@ class FoundationService:
     ) -> DashboardSummary:
         profile = profile or self.get_profile()
         if user_id and user_id in auth_store.profiles:
-            if not profile.skills:
-                skills_set: list[str] = []
-                for s in auth_store.career_entities.get(user_id, {}).get("skills", {}).values():
-                    name = s.get("name")
-                    if name and name not in skills_set:
-                        skills_set.append(name)
-                for ext in auth_store.extracted_entities.get(user_id, {}).values():
-                    if ext.get("confirmed_by_user") and ext.get("entity_type") == "skills":
-                        text = ext.get("data", {}).get("text", "")
-                        for p in text.replace("\n", ",").split(","):
-                            clean = p.strip().strip("•-* \t")
-                            if clean and len(clean) < 60 and clean not in skills_set:
-                                skills_set.append(clean)
-                for pref_skill in profile.preferred_skills.keys():
-                    if pref_skill not in skills_set:
-                        skills_set.append(pref_skill)
-                if skills_set:
-                    profile = profile.model_copy(update={"skills": skills_set})
-                    auth_store.profiles[user_id] = profile
+            skills_set: list[str] = list(profile.skills or [])
+            for s in auth_store.career_entities.get(user_id, {}).get("skills", {}).values():
+                name = s.get("name")
+                if name and name not in skills_set:
+                    skills_set.append(name)
+            for ext in auth_store.extracted_entities.get(user_id, {}).values():
+                if ext.get("confirmed_by_user") and ext.get("entity_type") == "skills":
+                    text = ext.get("data", {}).get("text", "")
+                    for p in text.replace("\n", ",").split(","):
+                        clean = p.strip().strip("•-* \t")
+                        if clean and len(clean) < 60 and clean not in skills_set:
+                            skills_set.append(clean)
+            for pref_skill in profile.preferred_skills.keys():
+                if pref_skill not in skills_set:
+                    skills_set.append(pref_skill)
+            if len(skills_set) != len(profile.skills or []):
+                profile = profile.model_copy(update={"skills": skills_set})
+                auth_store.profiles[user_id] = profile
 
             if not profile.headline:
                 for ext in auth_store.extracted_entities.get(user_id, {}).values():
@@ -224,9 +223,31 @@ class FoundationService:
             bool(value)
             for value in (profile.headline, profile.location, profile.skills)
         )
+        all_open_jobs = [j for j in self.list_jobs() if getattr(j, "status", "open") == "open"]
+        if user_id:
+            try:
+                from app.intelligence import analyze_job
+
+                def job_rank(j: Job) -> tuple[int, float]:
+                    try:
+                        intel = analyze_job(user_id, j)
+                        ts = j.last_seen_at.timestamp() if j.last_seen_at else 0.0
+                        return (intel.fit_score, ts)
+                    except Exception:
+                        return (0, 0.0)
+
+                all_open_jobs.sort(key=job_rank, reverse=True)
+            except Exception:
+                pass
+        else:
+            all_open_jobs.sort(
+                key=lambda j: j.last_seen_at.timestamp() if j.last_seen_at else 0.0,
+                reverse=True,
+            )
+
         return DashboardSummary(
             profile=profile,
-            recommended_jobs=self.list_jobs()[:5],
+            recommended_jobs=all_open_jobs[:10],
             applications=applications[:5],
             profile_completeness=round(completed_fields / 3 * 100),
             jobs_discovered=len(self.list_jobs()),

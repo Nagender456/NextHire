@@ -158,3 +158,58 @@ def test_due_notification_is_delivered_once() -> None:
         item for item in service.data.applications if item.user_id != user_id
     ]
     _remove_user(user_id)
+
+
+def test_dashboard_recommended_jobs_highest_match_sorted() -> None:
+    client = TestClient(app)
+    email = "match-order-test@example.com"
+    signup = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": email,
+            "display_name": "Match Candidate",
+            "password": "Password123!",
+        },
+    )
+    assert signup.status_code == 201
+    user_id = auth_store.find_by_email(email).id
+
+    # Update profile with Python and FastAPI skills
+    client.patch(
+        "/api/v1/profile",
+        json={"skills": ["Python", "FastAPI"], "headline": "Software Engineer"},
+    )
+
+    # Ingest 2 jobs: one high match, one low match
+    low_job = Job(
+        id="job-low-match",
+        company_id="comp-a",
+        title="SEO Marketing Strategist",
+        location="Remote",
+        url="https://example.com/jobs/low",
+        required_skills=["SEO", "Content Writing"],
+    )
+    high_job = Job(
+        id="job-high-match",
+        company_id="comp-b",
+        title="Senior Python Backend Developer",
+        location="Remote",
+        url="https://example.com/jobs/high",
+        required_skills=["Python", "FastAPI"],
+    )
+    ingestion_store.jobs[low_job.id] = low_job
+    ingestion_store.jobs[high_job.id] = high_job
+
+    try:
+        dash_resp = client.get("/api/v1/dashboard")
+        assert dash_resp.status_code == 200
+        data = dash_resp.json()
+        rec_jobs = data["recommended_jobs"]
+        rec_ids = [j["id"] for j in rec_jobs]
+        assert "job-high-match" in rec_ids
+        assert "job-low-match" in rec_ids
+        assert rec_ids.index("job-high-match") < rec_ids.index("job-low-match")
+    finally:
+        ingestion_store.jobs.pop(low_job.id, None)
+        ingestion_store.jobs.pop(high_job.id, None)
+        _remove_user(user_id)

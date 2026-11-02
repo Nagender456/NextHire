@@ -109,4 +109,42 @@ describe("Job Matching Algorithm & Domain Safety", () => {
     const resSw = getJobSkillsAndScore(swJob, candidateSkills, "Full Stack Engineer");
     expect(resSw.score).toBeGreaterThanOrEqual(85);
   });
+
+  it("sorts jobs descending by highest match score with matched skills tie-breaker", () => {
+    const jobLow = {
+      id: "j-low",
+      title: "Marketing Specialist",
+      required_skills: ["SEO", "Content Marketing"],
+      preferred_skills: [],
+    };
+    const jobMid = {
+      id: "j-mid",
+      title: "Junior Backend Developer",
+      required_skills: ["Python", "Docker"],
+      preferred_skills: [],
+    };
+    const jobHigh = {
+      id: "j-high",
+      title: "Senior Full Stack Engineer",
+      required_skills: ["Python", "SQL", "FastAPI"],
+      preferred_skills: ["React"],
+    };
+
+    const jobs = [jobLow, jobHigh, jobMid];
+    const scoredJobs = jobs
+      .map((job) => {
+        const info = getJobSkillsAndScore(job, candidateSkills, "Full Stack Engineer");
+        return { ...job, score: info.score, matched: info.matched };
+      })
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return (b.matched?.length || 0) - (a.matched?.length || 0);
+      });
+
+    expect(scoredJobs[0].id).toBe("j-high");
+    expect(scoredJobs[1].id).toBe("j-mid");
+    expect(scoredJobs[2].id).toBe("j-low");
+    expect(scoredJobs[0].score).toBeGreaterThan(scoredJobs[1].score);
+    expect(scoredJobs[1].score).toBeGreaterThan(scoredJobs[2].score);
+  });
 });
