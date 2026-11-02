@@ -76,6 +76,7 @@ def get_settings() -> Settings:
     load_dotenv()
     s = Settings()
     if not s.gemini_api_key:
-        s.gemini_api_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")
+        s.gemini_api_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get(
+            "GOOGLE_API_KEY", ""
+        )
     return s
-

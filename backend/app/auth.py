@@ -301,4 +301,3 @@ def require_admin(user: User = Depends(current_user)) -> User:
             },
         )
     return user
-

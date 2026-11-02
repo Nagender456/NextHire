@@ -41,8 +41,18 @@ def test_candidate_target_company_whitelist_workflow(monkeypatch):
     assert pending_company.verification_status == "pending"
 
     # 4. Candidate cannot approve or reject (403 Forbidden)
-    assert cand_client.post(f"/api/v1/admin/companies/{pending_company.id}/approve").status_code == 403
-    assert cand_client.post(f"/api/v1/admin/companies/{pending_company.id}/reject").status_code == 403
+    assert (
+        cand_client.post(
+            f"/api/v1/admin/companies/{pending_company.id}/approve"
+        ).status_code
+        == 403
+    )
+    assert (
+        cand_client.post(
+            f"/api/v1/admin/companies/{pending_company.id}/reject"
+        ).status_code
+        == 403
+    )
 
     # 5. Admin logs in
     admin_client = TestClient(app)
@@ -87,9 +97,13 @@ def test_candidate_target_company_whitelist_workflow(monkeypatch):
     )
 
     # 7. Admin approves the company
-    approve_resp = admin_client.post(f"/api/v1/admin/companies/{pending_company.id}/approve")
+    approve_resp = admin_client.post(
+        f"/api/v1/admin/companies/{pending_company.id}/approve"
+    )
     assert approve_resp.status_code == 200
-    assert ingestion_store.companies[pending_company.id].verification_status == "verified"
+    assert (
+        ingestion_store.companies[pending_company.id].verification_status == "verified"
+    )
 
     # 8. Another company added by candidate to test rejection
     rej_target = f"Rejected Corp {suffix}"

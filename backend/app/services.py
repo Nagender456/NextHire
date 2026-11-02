@@ -57,12 +57,19 @@ class FoundationService:
         now = datetime.now(UTC)
         if payload.job_id and job:
             existing = next(
-                (a for a in self.data.applications if a.user_id == user_id and a.job_id == payload.job_id),
+                (
+                    a
+                    for a in self.data.applications
+                    if a.user_id == user_id and a.job_id == payload.job_id
+                ),
                 None,
             )
             if existing:
                 existing.status = payload.status
-                if payload.status != ApplicationStatus.SAVED and not existing.applied_at:
+                if (
+                    payload.status != ApplicationStatus.SAVED
+                    and not existing.applied_at
+                ):
                     existing.applied_at = now
                 if payload.notes:
                     existing.notes = payload.notes
@@ -86,10 +93,13 @@ class FoundationService:
                 self.data.add_application(existing)
                 from app.auth_store import auth_store
 
-                auth_store.add_application_activity(user_id, existing.id, f"updated_{payload.status}")
+                auth_store.add_application_activity(
+                    user_id, existing.id, f"updated_{payload.status}"
+                )
                 return existing
 
         from uuid import uuid4
+
         app_id = f"application-{uuid4().hex[:8]}"
         job_id = payload.job_id or f"manual-{uuid4().hex[:8]}"
         job_title = payload.job_title or (job.title if job else "Custom Role")
@@ -178,7 +188,9 @@ class FoundationService:
         profile = profile or self.get_profile()
         if user_id and user_id in auth_store.profiles:
             skills_set: list[str] = list(profile.skills or [])
-            for s in auth_store.career_entities.get(user_id, {}).get("skills", {}).values():
+            for s in (
+                auth_store.career_entities.get(user_id, {}).get("skills", {}).values()
+            ):
                 name = s.get("name")
                 if name and name not in skills_set:
                     skills_set.append(name)
@@ -200,18 +212,30 @@ class FoundationService:
                 for ext in auth_store.extracted_entities.get(user_id, {}).values():
                     if ext.get("confirmed_by_user"):
                         text = str(ext.get("data", {}).get("text", ""))
-                        if "LeetCode" in text or "ICPC" in text or "Competitive" in text:
-                            profile = profile.model_copy(update={"headline": "Software Engineer | Competitive Programmer"})
+                        if (
+                            "LeetCode" in text
+                            or "ICPC" in text
+                            or "Competitive" in text
+                        ):
+                            profile = profile.model_copy(
+                                update={
+                                    "headline": "Software Engineer | Competitive Programmer"
+                                }
+                            )
                             auth_store.profiles[user_id] = profile
                             break
                         elif ext.get("entity_type") == "experience" and text:
                             first_line = text.splitlines()[0].strip()
                             if first_line and len(first_line) < 60:
-                                profile = profile.model_copy(update={"headline": first_line})
+                                profile = profile.model_copy(
+                                    update={"headline": first_line}
+                                )
                                 auth_store.profiles[user_id] = profile
                                 break
                 if not profile.headline and profile.preferred_roles:
-                    profile = profile.model_copy(update={"headline": profile.preferred_roles[0]})
+                    profile = profile.model_copy(
+                        update={"headline": profile.preferred_roles[0]}
+                    )
                     auth_store.profiles[user_id] = profile
 
         applications = [
@@ -223,7 +247,9 @@ class FoundationService:
             bool(value)
             for value in (profile.headline, profile.location, profile.skills)
         )
-        all_open_jobs = [j for j in self.list_jobs() if getattr(j, "status", "open") == "open"]
+        all_open_jobs = [
+            j for j in self.list_jobs() if getattr(j, "status", "open") == "open"
+        ]
         if user_id:
             try:
                 from app.intelligence import analyze_job

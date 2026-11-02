@@ -23,10 +23,14 @@ def get_user_analytics(user_id: str) -> UserAnalytics:
     # Collect all user skills from profile, preferred skills, and confirmed CKB skills
     ckb_skills = [
         entity["name"]
-        for entity in auth_store.career_entities.get(user_id, {}).get("skills", {}).values()
+        for entity in auth_store.career_entities.get(user_id, {})
+        .get("skills", {})
+        .values()
         if entity.get("confirmed_by_user", True)
     ]
-    raw_user_skills = list(profile.skills) + ckb_skills + list(profile.preferred_skills.keys())
+    raw_user_skills = (
+        list(profile.skills) + ckb_skills + list(profile.preferred_skills.keys())
+    )
     user_skills_set = {normalize_skill(s) for s in raw_user_skills if s.strip()}
 
     matching_jobs = 0

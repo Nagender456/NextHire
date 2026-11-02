@@ -4,10 +4,6 @@ from time import perf_counter
 from uuid import uuid4
 
 from dotenv import load_dotenv
-load_dotenv()
-load_dotenv("d:/Programs/NextHire(Copilot)/.env")
-load_dotenv("d:/Programs/NextHire(Copilot)/backend/.env")
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
@@ -24,6 +20,10 @@ from app.rate_limit import RedisRateLimiter, rate_limiter
 from app.routes import auth_router, router as application_router
 from app.scheduler import scraper_scheduler
 
+load_dotenv()
+load_dotenv("d:/Programs/NextHire(Copilot)/.env")
+load_dotenv("d:/Programs/NextHire(Copilot)/backend/.env")
+
 configure_logging()
 logger = logging.getLogger("nexthire.requests")
 settings = get_settings()
@@ -38,7 +38,10 @@ distributed_rate_limiter = (
 async def lifespan(_app: FastAPI):
     import os
     import sys
-    is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+
+    is_testing = (
+        "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+    )
     if not is_testing:
         from app.job_ingestion import ingestion_store
 
@@ -60,7 +63,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
-    allow_origin_regex=settings.cors_origin_regex if settings.cors_origin_regex else r".*",
+    allow_origin_regex=settings.cors_origin_regex
+    if settings.cors_origin_regex
+    else r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

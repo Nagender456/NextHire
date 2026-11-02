@@ -27,39 +27,42 @@ class ScraperScheduler:
         """Execute a crawl of all active, verified companies."""
         started_at = datetime.now(UTC)
         self.last_run_at = started_at
-        logger.info("Starting scheduled Naukri job scraping for companies (every 12h)...")
+        logger.info(
+            "Starting scheduled Naukri job scraping for companies (every 12h)..."
+        )
 
-        target_companies = [
-            c for c in ingestion_store.companies.values()
-            if c.active
-        ]
+        target_companies = [c for c in ingestion_store.companies.values() if c.active]
 
         results = []
         for company in target_companies:
             try:
                 result = await asyncio.to_thread(ingestion_store.refresh, company.id)
-                results.append({
-                    "company_id": company.id,
-                    "company_name": company.name,
-                    "status": result.status,
-                    "jobs_found": result.jobs_found,
-                    "jobs_added": result.jobs_added,
-                    "jobs_updated": result.jobs_updated,
-                    "jobs_closed": result.jobs_closed,
-                    "error_code": result.error_code,
-                })
+                results.append(
+                    {
+                        "company_id": company.id,
+                        "company_name": company.name,
+                        "status": result.status,
+                        "jobs_found": result.jobs_found,
+                        "jobs_added": result.jobs_added,
+                        "jobs_updated": result.jobs_updated,
+                        "jobs_closed": result.jobs_closed,
+                        "error_code": result.error_code,
+                    }
+                )
             except Exception as exc:
                 logger.error("Error scraping company %s: %s", company.name, exc)
-                results.append({
-                    "company_id": company.id,
-                    "company_name": company.name,
-                    "status": "failed",
-                    "jobs_found": 0,
-                    "jobs_added": 0,
-                    "jobs_updated": 0,
-                    "jobs_closed": 0,
-                    "error_code": str(exc),
-                })
+                results.append(
+                    {
+                        "company_id": company.id,
+                        "company_name": company.name,
+                        "status": "failed",
+                        "jobs_found": 0,
+                        "jobs_added": 0,
+                        "jobs_updated": 0,
+                        "jobs_closed": 0,
+                        "error_code": str(exc),
+                    }
+                )
 
         admin_store.activity("periodic_scrape_12h")
         self.total_runs += 1
@@ -97,7 +100,10 @@ class ScraperScheduler:
             return
         self.is_running = True
         self._task = asyncio.create_task(self._loop())
-        logger.info("Scraper scheduler started with %s-second interval (12h)", self.interval_seconds)
+        logger.info(
+            "Scraper scheduler started with %s-second interval (12h)",
+            self.interval_seconds,
+        )
 
     def stop(self) -> None:
         self.is_running = False
@@ -113,7 +119,9 @@ class ScraperScheduler:
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "next_run_at": self.next_run_at.isoformat() if self.next_run_at else None,
             "total_runs": self.total_runs,
-            "active_companies": len([c for c in ingestion_store.companies.values() if c.active]),
+            "active_companies": len(
+                [c for c in ingestion_store.companies.values() if c.active]
+            ),
             "last_result": self.last_result,
         }
 

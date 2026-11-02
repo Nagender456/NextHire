@@ -57,7 +57,11 @@ def generate_resume(user_id: str, job: Job) -> ResumeContent:
     if intelligence.relevant_projects:
         projects = []
         for project in intelligence.relevant_projects:
-            tech_str = f" [{', '.join(project.technologies)}]" if getattr(project, "technologies", None) else ""
+            tech_str = (
+                f" [{', '.join(project.technologies)}]"
+                if getattr(project, "technologies", None)
+                else ""
+            )
             desc = f": {project.description}" if project.description else ""
             projects.append(
                 ResumeItem(
@@ -172,9 +176,7 @@ def render_latex(content: ResumeContent) -> str:
     }
 
     order = [
-        s.lower()
-        for s in (content.section_order or [])
-        if s.lower() in section_map
+        s.lower() for s in (content.section_order or []) if s.lower() in section_map
     ]
     for key in ("skills", "experience", "projects", "education", "certifications"):
         if key not in order:

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Any
 from fastapi import (
     APIRouter,
@@ -99,7 +100,6 @@ from app.security import generate_token, hash_password
 from app.services import service
 from app.documents import (
     ALLOWED_DOCUMENTS,
-    detect_entities,
     detect_entities_with_engine,
     extract_text,
     read_upload,
@@ -135,6 +135,7 @@ vector_search.jobs_provider = service.list_jobs
 
 router = APIRouter(prefix="/api/v1", tags=["application"])
 auth_router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
+logger = logging.getLogger(__name__)
 
 
 @auth_router.post("/signup", response_model=User, status_code=status.HTTP_201_CREATED)
@@ -319,7 +320,9 @@ async def update_skill(
 
 @router.delete("/career/skills/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_skill(entity_id: str, user: User = Depends(require_user)) -> None:
-    entity = auth_store.career_entities.get(user.id, {}).get("skills", {}).get(entity_id)
+    entity = (
+        auth_store.career_entities.get(user.id, {}).get("skills", {}).get(entity_id)
+    )
     skill_name = entity.get("name") if entity else None
     _delete_entity("skills", entity_id, user)
     vector_search.index.delete_entity(user.id, "career", entity_id)
@@ -327,7 +330,9 @@ async def delete_skill(entity_id: str, user: User = Depends(require_user)) -> No
         prof = auth_store.get_profile(user.id)
         if skill_name in prof.skills:
             new_skills = [s for s in prof.skills if s != skill_name]
-            auth_store.profiles[user.id] = prof.model_copy(update={"skills": new_skills})
+            auth_store.profiles[user.id] = prof.model_copy(
+                update={"skills": new_skills}
+            )
 
 
 @router.get("/career/projects", response_model=list[Project])
@@ -961,7 +966,11 @@ async def seed_sample_jobs(_user: User = Depends(require_user)) -> list[Job]:
             summary="Design, test, and optimize algorithmic core pipelines. High-impact role for competitive programmers, LeetCode problem solvers, and discrete math enthusiasts.",
             description="You will work with high-throughput search and distributed caching infrastructure. Expertise in data structures, algorithmic complexity, graph theory, and dynamic programming required.",
             required_skills=["Algorithms", "Data Structures", "C++", "Python"],
-            preferred_skills=["Competitive Programming", "System Design", "Problem Solving"],
+            preferred_skills=[
+                "Competitive Programming",
+                "System Design",
+                "Problem Solving",
+            ],
             status="open",
             last_seen_at=now,
         ),
@@ -1035,12 +1044,18 @@ async def list_jobs(
 ) -> list[Job]:
     profile = auth_store.get_profile(user.id)
     dismissed = set(getattr(profile, "dismissed_job_ids", []))
-    jobs = [job for job in service.list_jobs() if job.status == "open" and job.id not in dismissed]
+    jobs = [
+        job
+        for job in service.list_jobs()
+        if job.status == "open" and job.id not in dismissed
+    ]
     return jobs[offset : offset + limit]
 
 
 @router.post("/jobs/{job_id}/dismiss")
-async def dismiss_job(job_id: str, user: User = Depends(require_user)) -> dict[str, Any]:
+async def dismiss_job(
+    job_id: str, user: User = Depends(require_user)
+) -> dict[str, Any]:
     profile = auth_store.get_profile(user.id)
     dismissed = list(getattr(profile, "dismissed_job_ids", []))
     if job_id not in dismissed:
@@ -1351,7 +1366,9 @@ async def approve_company(
     return crawl
 
 
-@router.post("/admin/companies/{company_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/admin/companies/{company_id}/reject", status_code=status.HTTP_204_NO_CONTENT
+)
 async def reject_company(
     company_id: str, admin: User = Depends(require_admin)
 ) -> Response:
@@ -1382,10 +1399,22 @@ async def admin_companies(_admin: User = Depends(require_admin)) -> list[Company
 
 
 @router.post("/admin/companies/reset-prototype")
-async def reset_prototype_companies_endpoint(admin: User = Depends(require_admin)) -> dict[str, Any]:
+async def reset_prototype_companies_endpoint(
+    admin: User = Depends(require_admin),
+) -> dict[str, Any]:
     companies = ingestion_store.reset_prototype_companies()
-    admin_store.audit(admin.id, "companies_reset_prototype", "company", "bulk", {"count": len(companies)})
-    return {"status": "ok", "total": len(companies), "companies": [c.name for c in companies]}
+    admin_store.audit(
+        admin.id,
+        "companies_reset_prototype",
+        "company",
+        "bulk",
+        {"count": len(companies)},
+    )
+    return {
+        "status": "ok",
+        "total": len(companies),
+        "companies": [c.name for c in companies],
+    }
 
 
 @router.get("/admin/jobs", response_model=list[AdminJobSummary])
@@ -1539,12 +1568,14 @@ async def ingestion_alerts(
 @router.get("/admin/scheduler/status")
 async def get_scheduler_status(_admin: User = Depends(require_admin)) -> dict[str, Any]:
     from app.scheduler import scraper_scheduler
+
     return scraper_scheduler.get_status()
 
 
 @router.post("/admin/scheduler/trigger")
 async def trigger_scheduler_now(admin: User = Depends(require_admin)) -> dict[str, Any]:
     from app.scheduler import scraper_scheduler
+
     result = await scraper_scheduler.run_once()
     admin_store.audit(admin.id, "scraper_triggered_manually", "ingestion")
     return result
