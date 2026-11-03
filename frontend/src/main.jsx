@@ -181,7 +181,9 @@ function App() {
   if (path === "/signup") {
     return <AuthPage mode="signup" onAuthenticated={setUser} />;
   }
-  if (path === "/forgot-password") return <PasswordResetPage />;
+  if (path === "/forgot-password") {
+    return <AuthPage mode="login" onAuthenticated={setUser} />;
+  }
   if (!user) {
     return <AuthRequired />;
   }
@@ -2470,8 +2472,6 @@ function AuthPage({ mode, onAuthenticated }) {
                 <span>Sign in as Admin (admin@nexthire.dev)</span>
               </button>
             </div>
-            <a className="secondary-link" href="/forgot-password">Forgot password?</a>
-            <a className="secondary-link" href="/api/v1/auth/google/login">Continue with Google</a>
           </>
         )}
         <a className="secondary-link" href={mode === "login" ? "/signup" : "/login"}>
