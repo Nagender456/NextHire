@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from typing import Any
 from pymongo import MongoClient
@@ -10,6 +11,27 @@ from app.models import (
     User,
     UserRole,
 )
+
+
+def _normalize_edu_degree(d: str) -> str:
+    s = (d or "").lower()
+    s = re.sub(r"['’]s\b", "", s)
+    s = re.sub(r"\bb\.?\s*tech\b", "bachelor of technology", s)
+    s = re.sub(r"\bm\.?\s*tech\b", "master of technology", s)
+    s = re.sub(r"\bb\.?\s*e\b", "bachelor of engineering", s)
+    s = re.sub(r"\bm\.?\s*e\b", "master of engineering", s)
+    s = re.sub(r"\bb\.?\s*s\b", "bachelor of science", s)
+    s = re.sub(r"\bm\.?\s*s\b", "master of science", s)
+    s = re.sub(r"\bm\.?\s*c\.?\s*a\b", "master of computer applications", s)
+    s = re.sub(r"\bb\.?\s*c\.?\s*a\b", "bachelor of computer applications", s)
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    return " ".join(s.split())
+
+
+def _normalize_edu_institution(inst: str) -> str:
+    s = (inst or "").lower()
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    return " ".join(s.split())
 
 
 class AuthStore:
@@ -394,6 +416,35 @@ class AuthStore:
             fixed = self._sanitize_entity(entity_type, v)
             raw[k] = fixed
             sanitized.append(fixed)
+
+        if entity_type == "education":
+            deduped = []
+            seen_levels = set()
+            for item in sanitized:
+                deg_norm = _normalize_edu_degree(item.get("degree") or "")
+                inst_norm = _normalize_edu_institution(item.get("institution") or "")
+                level = next((lvl for lvl in ("master", "bachelor", "doctorate", "phd", "diploma", "associate") if lvl in deg_norm), deg_norm)
+                generic_insts = {"university", "institution", "institute", "college", "school", "academy", ""}
+                key = f"{level}:{inst_norm}" if inst_norm and inst_norm not in generic_insts else level
+                if key and key not in seen_levels:
+                    seen_levels.add(key)
+                    deduped.append(item)
+                elif not key:
+                    deduped.append(item)
+            return deduped
+
+        if entity_type == "skills":
+            deduped = []
+            seen = set()
+            for item in sanitized:
+                k = (item.get("name") or "").strip().lower()
+                if k and k not in seen:
+                    seen.add(k)
+                    deduped.append(item)
+                elif not k:
+                    deduped.append(item)
+            return deduped
+
         return sanitized
 
     def create_entity(
@@ -442,6 +493,55 @@ class AuthStore:
                         and (existing.get("title") or "").strip().lower() == target_title
                     ):
                         existing.update({k: v for k, v in sanitized.items() if v})
+                        existing["updated_at"] = now
+                        return existing
+
+        elif entity_type == "education":
+            target_deg = _normalize_edu_degree(sanitized.get("degree") or "")
+            target_inst = _normalize_edu_institution(sanitized.get("institution") or "")
+
+            for existing in self.career_entities[user_id]["education"].values():
+                ex_deg = _normalize_edu_degree(existing.get("degree") or "")
+                ex_inst = _normalize_edu_institution(existing.get("institution") or "")
+
+                deg_match = False
+                if target_deg and ex_deg:
+                    if target_deg == ex_deg:
+                        deg_match = True
+                    elif target_deg in ex_deg or ex_deg in target_deg:
+                        deg_match = True
+                    elif any(
+                        level in target_deg and level in ex_deg
+                        for level in ("master", "bachelor", "doctorate", "phd", "diploma", "associate")
+                    ):
+                        deg_match = True
+
+                generic_insts = {"university", "institution", "institute", "college", "school", "academy", ""}
+                inst_match = False
+                if not target_inst or not ex_inst or target_inst in generic_insts or ex_inst in generic_insts:
+                    inst_match = True
+                elif target_inst == ex_inst or target_inst in ex_inst or ex_inst in target_inst:
+                    inst_match = True
+
+                if deg_match and inst_match:
+                    if sanitized.get("year") and not existing.get("year"):
+                        existing["year"] = sanitized["year"]
+                    if sanitized.get("institution") and (existing.get("institution", "").lower() in ("university", "institution", "") or len(sanitized["institution"]) > len(existing.get("institution", ""))):
+                        existing["institution"] = sanitized["institution"]
+                    if sanitized.get("description") and len(sanitized["description"]) > len(existing.get("description", "")):
+                        existing["description"] = sanitized["description"]
+                    existing["updated_at"] = now
+                    return existing
+
+        elif entity_type == "achievements":
+            target_title = (sanitized.get("title") or "").strip().lower()
+            if target_title:
+                clean_title = re.sub(r"[^a-z0-9\s]", " ", target_title).strip()
+                for existing in self.career_entities[user_id]["achievements"].values():
+                    ex_title = (existing.get("title") or "").strip().lower()
+                    clean_ex = re.sub(r"[^a-z0-9\s]", " ", ex_title).strip()
+                    if clean_title == clean_ex or (clean_title and clean_ex and (clean_title in clean_ex or clean_ex in clean_title)):
+                        existing.update({k: v for k, v in sanitized.items() if v and not existing.get(k)})
                         existing["updated_at"] = now
                         return existing
 

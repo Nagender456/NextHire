@@ -220,7 +220,7 @@ class CareerDocument(BaseModel):
     size: int
     extracted_text: str = ""
     status: str = "processed"
-    extraction_engine: str = "Gemini AI"
+    extraction_engine: str = "NextHire Engine"
     created_at: datetime
 
 

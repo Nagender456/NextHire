@@ -263,7 +263,7 @@ def _extract_with_gemini(text: str) -> tuple[list[dict[str, object]] | None, str
                                 model_candidate,
                                 len(results),
                             )
-                            return results, f"Gemini AI ({model_candidate})"
+                            return results, "NextHire Engine"
                 else:
                     logger.warning("Gemini REST model %s returned status %d", model_candidate, resp.status_code)
         except Exception as e:
@@ -291,7 +291,7 @@ def _extract_with_gemini(text: str) -> tuple[list[dict[str, object]] | None, str
                             model_candidate,
                             len(results),
                         )
-                        return results, f"Gemini AI ({model_candidate})"
+                        return results, "NextHire Engine"
             except Exception:
                 continue
     except Exception as exc:
@@ -660,7 +660,7 @@ def detect_entities_with_engine(text: str) -> tuple[list[dict[str, object]], str
 
     # 2. Intelligent NLP / Heuristic Engine
     logger.info("Using High-Fidelity Local NLP Engine for resume entity extraction.")
-    return _extract_with_advanced_nlp(text), "Local NLP Engine"
+    return _extract_with_advanced_nlp(text), "NextHire Engine"
 
 
 def detect_entities(text: str) -> list[dict[str, object]]:

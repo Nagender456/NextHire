@@ -239,7 +239,7 @@ function App() {
           )}
         </nav>
         <div className="sidebar-footer">
-          <span>AI career assistant</span>
+          <span>Career workspace assistant</span>
         </div>
       </aside>
       <main className="content" id="main-content">
@@ -846,7 +846,7 @@ function JobIntelligenceModal({ job, onClose }) {
           <div className="ai-modal-title-row">
             <Sparkles size={18} className="linear-icon-primary" />
             <div>
-              <h3>AI Match Breakdown</h3>
+              <h3>Match Breakdown</h3>
               <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
                 {job.title} · {job.companyName || job.company_id}
               </span>
@@ -1589,7 +1589,7 @@ function JobsPage() {
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
+                    <div className={`ai-match-badge ${scoreClass}`} title="Career Alignment Score">
                       <Sparkles size={12} />
                       <span>{job.score}% Match</span>
                     </div>
@@ -3338,7 +3338,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
       </div>
 
       <div className="section-header-row" style={{ marginTop: "1.75rem" }}>
-        <h3>Resume document & AI retrieval</h3>
+        <h3>Resume document & Profile Sync</h3>
         <button
           type="button"
           className="add-btn"
@@ -3360,9 +3360,9 @@ function CareerKnowledgeBase({ onProfileSync }) {
         <div className="ai-parsing-banner">
           <Sparkles size={20} className="spin-icon" style={{ color: "var(--colors-primary)", flexShrink: 0 }} />
           <div>
-            <strong>AI is analyzing your resume...</strong>
+            <strong>Processing your resume...</strong>
             <p style={{ margin: "2px 0 0 0", fontSize: "13px", color: "var(--colors-slate)" }}>
-              Extracting skills taxonomy, work history, projects, and credentials with AI confidence scoring.
+              Scanning sections, skills, work history, education, and credentials.
             </p>
           </div>
         </div>
@@ -3374,7 +3374,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
             <span>✓ Processed <strong>{document.filename}</strong></span>
             {document.extraction_engine && (
               <span style={{ background: "rgba(99, 102, 241, 0.15)", color: "var(--colors-primary)", border: "1px solid rgba(99, 102, 241, 0.3)", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
-                ✨ {document.extraction_engine}
+                Verified Parse
               </span>
             )}
           </p>
@@ -3383,9 +3383,9 @@ function CareerKnowledgeBase({ onProfileSync }) {
             <div className="ai-extracted-header">
               <div className="ai-extracted-title-group">
                 <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
-                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600 }}>AI Extracted Findings</h3>
+                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600 }}>Extracted Profile Findings</h3>
                 <span className="ai-confidence-pill" style={{ background: "rgba(99, 102, 241, 0.12)", color: "var(--colors-primary)", border: "1px solid rgba(99, 102, 241, 0.25)" }}>
-                  ✨ {document.extraction_engine || "AI Analyzed"}{extracted.length > 0 ? ` (${extracted.length} pending)` : ""}
+                  Ready for Review{extracted.length > 0 ? ` (${extracted.length} pending)` : ""}
                 </span>
               </div>
               {extracted.length > 0 ? (
@@ -3396,8 +3396,8 @@ function CareerKnowledgeBase({ onProfileSync }) {
                     style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", padding: "6px 14px" }}
                     onClick={acceptAllExtracted}
                   >
-                    <Sparkles size={13} />
-                    Accept All AI Findings ({extracted.length})
+                    <Check size={13} />
+                    Accept All Findings ({extracted.length})
                   </button>
                 </div>
               ) : (
@@ -3596,6 +3596,24 @@ function CareerRecordForm({ type, label, template }) {
     setFormFields((prev) => ({ ...prev, [key]: val }));
   };
 
+  const displayRecords = useMemo(() => {
+    if (type !== "education") return records;
+    const seen = new Set();
+    const result = [];
+    for (const r of records) {
+      const deg = (r.degree || "").toLowerCase().replace(/['’]s\b/g, "").replace(/[^a-z0-9]/g, " ").trim();
+      const inst = (r.institution || "").toLowerCase().replace(/[^a-z0-9]/g, " ").trim();
+      const level = ["master", "bachelor", "phd", "doctorate", "diploma", "associate"].find((l) => deg.includes(l)) || deg;
+      const generic = ["university", "institution", "college", "institute", "school", "academy", ""];
+      const key = inst && !generic.includes(inst) ? `${level}:${inst}` : level;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(r);
+      }
+    }
+    return result;
+  }, [records, type]);
+
   const save = (event) => {
     event.preventDefault();
     setError("");
@@ -3646,7 +3664,7 @@ function CareerRecordForm({ type, label, template }) {
   return (
     <div className="career-record">
       <div className="section-header-row" style={{ marginTop: 0 }}>
-        <h3>{label} ({records.length})</h3>
+        <h3>{label} ({displayRecords.length})</h3>
         <button
           type="button"
           className="add-btn"
@@ -3870,12 +3888,12 @@ function CareerRecordForm({ type, label, template }) {
       )}
 
       <ul className="entity-list" style={{ marginTop: "8px" }}>
-        {records.length === 0 && !showForm && (
+        {displayRecords.length === 0 && !showForm && (
           <li style={{ color: "var(--colors-steel)", background: "transparent", border: "none", padding: "4px 0", fontSize: "13px" }}>
             No {label.toLowerCase()} entries yet. Click + Add to add one.
           </li>
         )}
-        {records.map((record) => {
+        {displayRecords.map((record) => {
           let mainTitle = record.name || record.title || record.degree || record.company || record.institution || "Entry";
           let subtitle = "";
           let metaDate = record.issued_date || record.dates || record.year || record.achieved_date || "";
@@ -3992,7 +4010,7 @@ function TailoredResumesSection() {
     <section className="profile-form" style={{ marginTop: "2rem" }}>
       <div className="section-header-row" style={{ marginTop: 0, justifyContent: "space-between" }}>
         <div>
-          <p className="eyebrow">AI RESUME COMPILER</p>
+          <p className="eyebrow">RESUME COMPILER</p>
           <h2>Tailored Resume Versions ({resumes.length})</h2>
           <p className="intro" style={{ margin: "2px 0 0 0", fontSize: "13.5px" }}>
             NextHire tailors your verified skills, projects, and work history specifically to any job requirements. Compile and export version-controlled LaTeX resumes with zero hallucination.
@@ -5198,7 +5216,7 @@ function DashboardContent({ dashboard, error, onReload, user }) {
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <div className={`ai-match-badge ${scoreClass}`} title="AI Career Alignment Score">
+                      <div className={`ai-match-badge ${scoreClass}`} title="Career Alignment Score">
                         <Sparkles size={11} />
                         <span>{score}% Match</span>
                       </div>
@@ -6139,7 +6157,7 @@ function SettingsPage({ user }) {
         <div className="widget-header">
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <Sparkles size={16} className="linear-icon-primary" />
-            <h3 className="widget-title">AI Matching & Resume Tailoring Parameters</h3>
+            <h3 className="widget-title">Job Matching & Resume Tailoring Parameters</h3>
           </div>
           <span className="widget-tag">Algorithmic Tuning</span>
         </div>
@@ -6201,14 +6219,14 @@ function SettingsPage({ user }) {
               onClick={() => handleUpdateThreshold(minFitScore)}
               style={{ padding: "7px 18px", fontSize: "13px" }}
             >
-              Save AI Parameters
+              Save Matching Parameters
             </button>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", borderRadius: "6px", background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.2)" }}>
             <ShieldCheck size={16} style={{ color: "var(--colors-primary)", flexShrink: 0 }} />
             <span style={{ fontSize: "12.5px", color: "var(--colors-ink)" }}>
-              AI Engine: <strong>Gemini 1.5 Flash + Rule-Based Token Taxonomy Active</strong>. Strict provenance guarantees zero hallucinated career claims.
+              Engine: <strong>NextHire Precision Matcher Active</strong>. Strict provenance guarantees zero unverified career claims.
             </span>
           </div>
         </div>
