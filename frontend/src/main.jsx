@@ -2441,39 +2441,7 @@ function AuthPage({ mode, onAuthenticated }) {
         <label>Password<input required minLength="8" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
         {error && <p className="error-message" role="alert">{error}</p>}
         <button className="primary-button" type="submit">{mode === "login" ? "Sign in" : "Sign up"}</button>
-        {mode === "login" && (
-          <>
-            <div style={{ marginTop: "0.75rem", padding: "12px", borderRadius: "8px", background: "rgba(86, 69, 212, 0.06)", border: "1px dashed rgba(86, 69, 212, 0.25)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--colors-primary)", display: "flex", alignItems: "center", gap: "5px" }}>
-                  <ShieldCheck size={14} />
-                  Administrator Workspace
-                </span>
-                <span style={{ fontSize: "11px", color: "var(--colors-steel)" }}>Role: ADMIN</span>
-              </div>
-              <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "var(--colors-slate)", lineHeight: 1.4 }}>
-                One-click login to manage company career pages and 12-hour scraping schedules.
-              </p>
-              <button
-                type="button"
-                className="button-secondary"
-                style={{ width: "100%", justifyContent: "center", fontSize: "13px", padding: "8px 12px", gap: "6px", display: "flex", alignItems: "center" }}
-                onClick={() => {
-                  setForm({ email: "admin@nexthire.dev", password: "Admin12345!", displayName: "Administrator" });
-                  signIn("admin@nexthire.dev", "Admin12345!")
-                    .then((nextUser) => {
-                      onAuthenticated(nextUser);
-                      window.location.href = "/admin";
-                    })
-                    .catch((e) => setError(e.message));
-                }}
-              >
-                <ShieldCheck size={14} />
-                <span>Sign in as Admin (admin@nexthire.dev)</span>
-              </button>
-            </div>
-          </>
-        )}
+
         <a className="secondary-link" href={mode === "login" ? "/signup" : "/login"}>
           {mode === "login" ? "Create an account" : "Already have an account?"}
         </a>
