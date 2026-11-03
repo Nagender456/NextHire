@@ -119,6 +119,7 @@ from app.resumes import (
     TEMPLATES,
     create_version,
     render_latex,
+    render_pdf,
     validate_content,
     validate_format,
     validate_template,
@@ -1155,10 +1156,36 @@ async def export_resume_latex(
     if resume is None:
         raise HTTPException(status_code=404, detail={"code": "RESUME_NOT_FOUND"})
     auth_store.save_resume_export(user.id, resume_id, "latex")
+    profile = auth_store.get_profile(user.id)
     return Response(
-        content=render_latex(resume["content"]),
+        content=render_latex(
+            resume["content"],
+            profile=profile,
+            template=resume.get("template", "jack"),
+        ),
         media_type="application/x-latex",
         headers={"Content-Disposition": f'attachment; filename="{resume_id}.tex"'},
+    )
+
+
+@router.get("/resumes/{resume_id}/pdf", response_class=Response)
+async def export_resume_pdf(
+    resume_id: str, user: User = Depends(require_user)
+) -> Response:
+    resume = auth_store.resume_versions[user.id].get(resume_id)
+    if resume is None:
+        raise HTTPException(status_code=404, detail={"code": "RESUME_NOT_FOUND"})
+    auth_store.save_resume_export(user.id, resume_id, "pdf")
+    profile = auth_store.get_profile(user.id)
+    pdf_bytes = render_pdf(
+        resume["content"],
+        profile=profile,
+        template=resume.get("template", "jack"),
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{resume_id}.pdf"'},
     )
 
 

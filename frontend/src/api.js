@@ -373,6 +373,20 @@ export function exportResumeLatex(resumeId) {
   });
 }
 
+export function exportResumePdf(resumeId) {
+  const csrfToken = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("nexthire_csrf="))
+    ?.split("=")[1];
+  return fetch(`${apiBaseUrl}/api/v1/resumes/${resumeId}/pdf`, {
+    credentials: "include",
+    headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`PDF export failed with ${response.status}`);
+    return response.blob();
+  });
+}
+
 export function listApplications() {
   return request("/api/v1/applications");
 }

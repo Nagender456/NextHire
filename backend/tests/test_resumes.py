@@ -54,3 +54,48 @@ def test_resume_edits_require_confirmed_sources_and_escape_latex() -> None:
     )
     assert r"Candidate \& engineer" in latex
     assert r"C++" in latex
+
+
+def test_jack_resume_template_and_pdf_export() -> None:
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.resumes import render_pdf, TEMPLATES
+
+    assert "jack" in TEMPLATES
+
+    # Test PDF download endpoint with authenticated client
+    client = TestClient(app)
+    signup = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": "pdf-resume@example.com",
+            "display_name": "Jane Doe",
+            "password": "correct horse battery staple",
+        },
+    )
+    assert signup.status_code == 201
+    user_id = auth_store.find_by_email("pdf-resume@example.com").id
+
+    job = Job(
+        id="pdf-job-1",
+        company_id="company-pdf",
+        title="Software Engineer",
+        location="San Francisco, CA",
+        url="https://example.com/pdf-job",
+        required_skills=["Python", "FastAPI"],
+    )
+
+    version = create_version(user_id, job)
+    assert version.template == "jack"
+
+    # Test direct PDF rendering
+    pdf_bytes = render_pdf(version.content, profile=auth_store.get_profile(user_id))
+    assert isinstance(pdf_bytes, bytes)
+    assert len(pdf_bytes) > 500
+    assert pdf_bytes.startswith(b"%PDF-")
+
+    resp = client.get(f"/api/v1/resumes/{version.id}/pdf")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert f'attachment; filename="{version.id}.pdf"' in resp.headers["content-disposition"]
+    assert resp.content.startswith(b"%PDF-")

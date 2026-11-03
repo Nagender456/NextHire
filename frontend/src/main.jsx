@@ -67,6 +67,7 @@ import {
   updateResume,
   listResumeTemplates,
   exportResumeLatex,
+  exportResumePdf,
 } from "./api";
 import { paginateItems } from "./pagination";
 import {
@@ -1028,6 +1029,16 @@ function JobIntelligenceModal({ job, onClose }) {
           onApprove={(r) => {
             updateResume(r.id, r.content, "approved").then((updated) => setTailoredResume(updated));
           }}
+          onDownloadPdf={(resumeId, filename) => {
+            exportResumePdf(resumeId).then((blob) => {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            });
+          }}
           onDownloadLatex={(resumeId, filename) => {
             exportResumeLatex(resumeId).then((latex) => {
               const blob = new Blob([latex], { type: "application/x-latex" });
@@ -1756,6 +1767,16 @@ function JobsPage() {
           onApprove={(r) => {
             updateResume(r.id, r.content, "approved").then((updated) => {
               setActiveTailoredResume(updated);
+            });
+          }}
+          onDownloadPdf={(resumeId, filename) => {
+            exportResumePdf(resumeId).then((blob) => {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
             });
           }}
           onDownloadLatex={(resumeId, filename) => {
@@ -3992,6 +4013,19 @@ function TailoredResumesSection() {
       .catch((err) => setError(err.message));
   };
 
+  const handleDownloadPdf = (resumeId, filename = "tailored-resume.pdf") => {
+    exportResumePdf(resumeId)
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err) => setError(err.message));
+  };
+
   const handleDownloadLatex = (resumeId, filename = "tailored-resume.tex") => {
     exportResumeLatex(resumeId)
       .then((latex) => {
@@ -4116,6 +4150,16 @@ function TailoredResumesSection() {
                     <button
                       type="button"
                       className="button-secondary"
+                      onClick={() => handleDownloadPdf(resume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${resume.version}.pdf`)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", padding: "6px 12px", background: "rgba(37, 99, 235, 0.08)", color: "var(--colors-primary)", borderColor: "rgba(37, 99, 235, 0.3)" }}
+                      title="Download direct ATS PDF (Jack Resume format)"
+                    >
+                      <Download size={13} />
+                      <span>Direct PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
                       onClick={() => handleDownloadLatex(resume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${resume.version}.tex`)}
                       style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12.5px", padding: "6px 12px" }}
                       title="Download LaTeX source (.tex)"
@@ -4171,13 +4215,14 @@ function TailoredResumesSection() {
           onClose={() => setActiveResume(null)}
           onApprove={handleApprove}
           onDownloadLatex={handleDownloadLatex}
+          onDownloadPdf={handleDownloadPdf}
         />
       )}
     </section>
   );
 }
 
-function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApprove, onDownloadLatex }) {
+function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApprove, onDownloadLatex, onDownloadPdf }) {
   const [currentResume, setCurrentResume] = useState(resume);
   const [activeTab, setActiveTab] = useState("document");
   const [latexSource, setLatexSource] = useState("");
@@ -4223,6 +4268,22 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const handlePdfDownload = () => {
+    const filename = `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${currentResume.version}.pdf`;
+    if (onDownloadPdf) {
+      onDownloadPdf(currentResume.id, filename);
+    } else {
+      exportResumePdf(currentResume.id).then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+    }
   };
 
   const moveSection = (index, direction) => {
@@ -4418,9 +4479,21 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
               </span>
             </div>
           </div>
-          <button className="ai-modal-close-btn" onClick={onClose} aria-label="Close modal">
-            <X size={18} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={handlePdfDownload}
+              style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", padding: "5px 12px" }}
+              title="Download direct ATS PDF (Jack Resume format)"
+            >
+              <Download size={13} />
+              <span>Download PDF</span>
+            </button>
+            <button className="ai-modal-close-btn" onClick={onClose} aria-label="Close modal">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Tab Switcher */}
@@ -4487,11 +4560,11 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
                     <input
                       type="radio"
                       name="resumeTemplate"
-                      value="default"
-                      checked={selectedTemplate === "default"}
-                      onChange={() => setSelectedTemplate("default")}
+                      value="jack"
+                      checked={selectedTemplate === "jack" || selectedTemplate === "default"}
+                      onChange={() => setSelectedTemplate("jack")}
                     />
-                    <span>Clean Single-Column (Default)</span>
+                    <span>Jack Resume (Standard ATS Single-Column — Recommended)</span>
                   </label>
                   <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "13px" }}>
                     <input
@@ -4747,15 +4820,28 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
 
         {/* Modal Footer */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.5rem", borderTop: "1px solid var(--colors-hairline)", background: "var(--colors-surface-soft)" }}>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => onDownloadLatex(currentResume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${currentResume.version}.tex`)}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            <Download size={13} />
-            <span>Download LaTeX (.tex)</span>
-          </button>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={handlePdfDownload}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              title="Download direct PDF (Jack Resume ATS template)"
+            >
+              <Download size={13} />
+              <span>Download Direct PDF</span>
+            </button>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => onDownloadLatex(currentResume.id, `${jobTitle.replace(/[^a-zA-Z0-9]/g, "_")}_v${currentResume.version}.tex`)}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              title="Download LaTeX source (.tex)"
+            >
+              <Download size={13} />
+              <span>Download LaTeX (.tex)</span>
+            </button>
+          </div>
 
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             {!isApproved ? (
@@ -5350,6 +5436,16 @@ function DashboardContent({ dashboard, error, onReload, user }) {
           onApprove={(r) => {
             updateResume(r.id, r.content, "approved").then((updated) => setTailoredResumeForPreview(updated));
           }}
+          onDownloadPdf={(resumeId, filename) => {
+            exportResumePdf(resumeId).then((blob) => {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            });
+          }}
           onDownloadLatex={(resumeId, filename) => {
             exportResumeLatex(resumeId).then((latex) => {
               const blob = new Blob([latex], { type: "application/x-latex" });
@@ -5829,6 +5925,16 @@ function AnalyticsPage() {
           }}
           onApprove={(r) => {
             updateResume(r.id, r.content, "approved").then((updated) => setTailoredResume(updated));
+          }}
+          onDownloadPdf={(resumeId, filename) => {
+            exportResumePdf(resumeId).then((blob) => {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            });
           }}
           onDownloadLatex={(resumeId, filename) => {
             exportResumeLatex(resumeId).then((latex) => {
