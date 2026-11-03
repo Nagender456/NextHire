@@ -500,8 +500,17 @@ export function getCandidateDomain(candidateSkills = [], headline = "") {
 export function getJobSkillsAndScore(job, userSkills = [], candidateHeadline = "") {
   const rawSkills = Array.isArray(userSkills) ? userSkills : [];
   const candidateSkills = flattenCandidateSkills(rawSkills);
-  const required = job.required_skills || [];
-  const preferred = job.preferred_skills || [];
+
+  const junkTokens = new Set(["iii", "ii", "iv", "v", "vi", "software", "engineer", "developer", "role", "job", "position", "full-time", "part-time", "intern"]);
+  const isValidSkill = (s) => {
+    const clean = (s || "").trim().toLowerCase();
+    return Boolean(clean) && !junkTokens.has(clean) && clean.length >= 2;
+  };
+
+  const rawReq = job.required_skills || [];
+  const rawPref = job.preferred_skills || [];
+  const required = rawReq.filter(isValidSkill);
+  const preferred = rawPref.filter(isValidSkill);
   const jobDomain = getRoleDomain(job.title || "");
 
   // If candidate has no skills configured, do not inflate scores. Return 0% match!
@@ -532,7 +541,7 @@ export function getJobSkillsAndScore(job, userSkills = [], candidateHeadline = "
   if (required.length > 0 && preferred.length > 0) {
     const reqRatio = matchedRequired.length / required.length;
     const prefRatio = matchedPreferred.length / preferred.length;
-    score = Math.round((reqRatio * 0.8 + prefRatio * 0.2) * 100);
+    score = Math.round((reqRatio * 0.7 + prefRatio * 0.3) * 100);
   } else if (required.length > 0) {
     const reqRatio = matchedRequired.length / required.length;
     score = Math.round(reqRatio * 100);
@@ -825,7 +834,42 @@ function JobIntelligenceModal({ job, onClose }) {
       .catch((err) => setIntelligenceError(err.message));
   }, [job?.id]);
 
-  if (!job) return null;
+  // Single Source of Truth Alignment:
+  // If the job card already computed and displayed a score, ensure the modal reflects that exact score
+  const cardScore = typeof job.score === "number" ? job.score : null;
+  const effectiveScore = cardScore !== null ? cardScore : (intelligence?.fit_score ?? 0);
+  const isRecommended = effectiveScore >= 60;
+
+  // Reconcile matched skills:
+  // Always include all skills marked as matched on the card, plus any backend matched skills
+  const cardMatched = Array.isArray(job.matched) ? job.matched : [];
+  const backendMatched = [
+    ...(intelligence?.matched_required_skills || []),
+    ...(intelligence?.matched_preferred_skills || []),
+  ];
+  const combinedMatched = Array.from(new Set([...cardMatched, ...backendMatched].map((s) => s.trim()))).filter(Boolean);
+  const matchedLower = new Set(combinedMatched.map((s) => s.toLowerCase()));
+
+  // Reconcile missing skills:
+  // Never show a skill as missing if it was already matched on the card or in intelligence!
+  // Filter out junk tokens like "iii", "ii", "software"
+  const junkTokens = new Set(["iii", "ii", "iv", "v", "vi", "software", "engineer", "developer", "role", "job"]);
+  const cardMissing = Array.isArray(job.missing) ? job.missing : [];
+  const backendMissing = [
+    ...(intelligence?.missing_required_skills || []),
+    ...(intelligence?.missing_preferred_skills || []),
+  ];
+  const combinedMissing = Array.from(
+    new Set(
+      [...cardMissing, ...backendMissing]
+        .map((s) => s.trim())
+        .filter((s) => Boolean(s) && !matchedLower.has(s.toLowerCase()) && !junkTokens.has(s.toLowerCase()))
+    )
+  );
+
+  const displayReason = intelligence?.recommendation_reason
+    ? intelligence.recommendation_reason.replace(/^\d+%\s*fit/, `${effectiveScore}% fit`)
+    : `${effectiveScore}% fit based on career alignment.`;
 
   return (
     <div className="ai-modal-backdrop" onClick={onClose}>
@@ -864,26 +908,26 @@ function JobIntelligenceModal({ job, onClose }) {
                     Career Alignment
                   </span>
                   <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--colors-ink)", marginTop: "2px" }}>
-                    {intelligence.recommendation === "recommended" ? "Strong Fit Recommendation" : "Partial Fit"}
+                    {isRecommended ? "Strong Fit Recommendation" : "Partial Fit"}
                   </div>
                 </div>
-                <div className="ai-score-number">{intelligence.fit_score}%</div>
+                <div className="ai-score-number">{effectiveScore}%</div>
               </div>
 
               <div>
                 <h4 className="ai-section-title">Strategic Rationale</h4>
                 <p style={{ margin: 0, fontSize: "13.5px", color: "var(--colors-charcoal)", lineHeight: 1.6 }}>
-                  {intelligence.recommendation_reason}
+                  {displayReason}
                 </p>
               </div>
 
               <div>
                 <h4 className="ai-section-title">Matched Skills</h4>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {[...intelligence.matched_required_skills, ...intelligence.matched_preferred_skills].length === 0 ? (
+                  {combinedMatched.length === 0 ? (
                     <span style={{ fontSize: "13px", color: "var(--colors-steel)" }}>None identified yet</span>
                   ) : (
-                    [...intelligence.matched_required_skills, ...intelligence.matched_preferred_skills].map((skill) => (
+                    combinedMatched.map((skill) => (
                       <span className="skill-tag matched" key={skill}>
                         <Check size={11} />
                         <span>{skill}</span>
@@ -896,10 +940,10 @@ function JobIntelligenceModal({ job, onClose }) {
               <div>
                 <h4 className="ai-section-title">Skill Gaps & Opportunities</h4>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {[...intelligence.missing_required_skills, ...intelligence.missing_preferred_skills].length === 0 ? (
+                  {combinedMissing.length === 0 ? (
                     <span style={{ fontSize: "13px", color: "var(--colors-steel)" }}>No major gaps detected</span>
                   ) : (
-                    [...intelligence.missing_required_skills, ...intelligence.missing_preferred_skills].map((skill) => (
+                    combinedMissing.map((skill) => (
                       <span className="skill-tag missing" key={skill}>
                         <AlertCircle size={11} />
                         <span>{skill}</span>
@@ -4914,6 +4958,8 @@ function DashboardContent({ dashboard, error, onReload, user }) {
           ...job,
           skillsInfo,
           score: skillsInfo.score,
+          matched: skillsInfo.matched,
+          missing: skillsInfo.missing,
         };
       })
       .sort((a, b) => {

@@ -459,10 +459,17 @@ def _jobs_from_jobspy_df(df, company: Company | None = None) -> list[Job]:
 
         raw_skills = str(row.get("skills") or "").strip()
         parsed_skills = []
+        _junk_tokens = {"iii", "ii", "iv", "v", "vi", "software", "engineer", "developer", "role", "job", "position", "full-time", "part-time", "intern"}
         if raw_skills and raw_skills.lower() not in ("nan", "none"):
             for s in re.split(r"[,/|;]+", raw_skills):
                 clean_s = s.strip()
-                if clean_s and clean_s.lower() not in ("nan", "none") and len(clean_s) <= 40:
+                if (
+                    clean_s
+                    and clean_s.lower() not in ("nan", "none")
+                    and clean_s.lower() not in _junk_tokens
+                    and len(clean_s) <= 40
+                    and len(clean_s) >= 2
+                ):
                     parsed_skills.append(clean_s)
 
         if len(parsed_skills) >= 2:

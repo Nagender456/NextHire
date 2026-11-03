@@ -124,6 +124,84 @@ def _skills(values: Iterable[str]) -> dict[str, str]:
     return {normalize_skill(value): value for value in values if value.strip()}
 
 
+_JUNK_SKILLS = {"iii", "ii", "iv", "v", "vi", "software", "engineer", "developer", "role", "job", "position", "full-time", "part-time", "intern"}
+
+
+def is_valid_skill(skill: str) -> bool:
+    clean = re.sub(r"[\s\-_]+", " ", str(skill or "").strip().lower())
+    return bool(clean) and clean not in _JUNK_SKILLS and len(clean) >= 2
+
+
+def flatten_candidate_skills(skills: Iterable[str]) -> set[str]:
+    result: set[str] = set()
+    compound_map = {
+        "mern stack": ["mern stack", "react", "node.js", "mongodb", "express", "stack"],
+        "mean stack": ["mean stack", "angular", "node.js", "mongodb", "express", "stack"],
+        "full stack": ["full stack", "fullstack", "stack"],
+        "fullstack": ["full stack", "fullstack", "stack"],
+        "c/c++": ["c++", "c"],
+        "html/css": ["html", "css"],
+        "artificial intelligence": ["ai", "machine learning"],
+        "machine learning": ["ml", "machine learning"],
+    }
+    for raw in skills:
+        if not raw or not isinstance(raw, str):
+            continue
+        clean = raw.strip()
+        if not clean:
+            continue
+        norm = normalize_skill(clean)
+        result.add(norm)
+        # Category prefix: "Languages: C/C++" -> "C/C++"
+        if ":" in clean:
+            val = normalize_skill(clean.split(":", 1)[1])
+            if val:
+                result.add(val)
+        # Slash splitting: "C/C++" -> "C", "C++"
+        if "/" in clean:
+            for part in clean.split("/"):
+                p_norm = normalize_skill(part)
+                if p_norm:
+                    result.add(p_norm)
+        # Compound expansion
+        lower_raw = clean.lower()
+        for key, aliases in compound_map.items():
+            if key in lower_raw:
+                for alias in aliases:
+                    result.add(normalize_skill(alias))
+    return result
+
+
+def _matches_skill(target_skill: str, candidate_skills: set[str]) -> bool:
+    if not target_skill:
+        return False
+    target = normalize_skill(target_skill)
+    if not target:
+        return False
+    if target in candidate_skills:
+        return True
+
+    is_short = len(target) <= 3
+    for cand in candidate_skills:
+        if cand == target:
+            return True
+        # Direct acronym check
+        if (target == "ai" and "artificial intelligence" in cand) or (cand == "ai" and "artificial intelligence" in target):
+            return True
+        if (target == "ml" and "machine learning" in cand) or (cand == "ml" and "machine learning" in target):
+            return True
+
+        if is_short:
+            if re.search(r"(^|[^a-z0-9+#])" + re.escape(target) + r"($|[^a-z0-9+#])", cand, re.I):
+                return True
+        else:
+            if re.search(r"\b" + re.escape(target) + r"\b", cand, re.I):
+                return True
+            if len(cand) >= 4 and re.search(r"\b" + re.escape(cand) + r"\b", target, re.I):
+                return True
+    return False
+
+
 def _project_matches(project: dict, required: set[str], preferred: set[str]) -> bool:
     project_terms = {
         normalize_skill(value)
@@ -177,17 +255,20 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
     profile = auth_store.get_profile(user_id)
     auth_store._ensure_career_entities(user_id)
     entities = auth_store.career_entities[user_id]
-    user_skills = _skills(profile.skills)
-    user_skills.update(
-        _skills(
-            entity["name"]
-            for entity in entities["skills"].values()
-            if entity.get("confirmed_by_user", True)
-        )
+    
+    raw_user_skills = list(profile.skills)
+    raw_user_skills.extend(
+        entity["name"]
+        for entity in entities["skills"].values()
+        if entity.get("confirmed_by_user", True)
     )
-    if not user_skills:
-        required = _skills(job.required_skills)
-        preferred = _skills(job.preferred_skills)
+    candidate_skills = flatten_candidate_skills(raw_user_skills)
+
+    # Filter out junk tokens while preserving original casing
+    req_skills = [s for s in job.required_skills if is_valid_skill(s)]
+    pref_skills = [s for s in job.preferred_skills if is_valid_skill(s)]
+
+    if not candidate_skills:
         return JobIntelligence(
             job=job,
             fit_score=0,
@@ -196,31 +277,32 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
             evidence=["No skills configured on profile"],
             matched_required_skills=[],
             matched_preferred_skills=[],
-            missing_required_skills=sorted(required.values()),
-            missing_preferred_skills=sorted(preferred.values()),
+            missing_required_skills=sorted(req_skills),
+            missing_preferred_skills=sorted(pref_skills),
             relevant_projects=[],
-            learning_opportunities=[_learning(s, True) for s in sorted(required.values())[:3]],
+            learning_opportunities=[_learning(s, True) for s in sorted(req_skills)[:3]],
         )
-    required = _skills(job.required_skills)
-    preferred = _skills(job.preferred_skills)
-    matched_required = sorted(set(required) & set(user_skills))
-    matched_preferred = sorted(set(preferred) & set(user_skills))
-    missing_required = sorted(set(required) - set(user_skills))
-    missing_preferred = sorted(set(preferred) - set(user_skills))
-    required_score = len(matched_required) / len(required) if required else 0
-    preferred_score = len(matched_preferred) / len(preferred) if preferred else 0
-    if required and preferred:
+
+    matched_required = [s for s in req_skills if _matches_skill(s, candidate_skills)]
+    matched_preferred = [s for s in pref_skills if _matches_skill(s, candidate_skills)]
+    missing_required = [s for s in req_skills if s not in matched_required]
+    missing_preferred = [s for s in pref_skills if s not in matched_preferred]
+
+    required_score = len(matched_required) / len(req_skills) if req_skills else 0
+    preferred_score = len(matched_preferred) / len(pref_skills) if pref_skills else 0
+
+    if req_skills and pref_skills:
         raw_score = (required_score * 0.7 + preferred_score * 0.3) * 100
-    elif required:
+    elif req_skills:
         raw_score = required_score * 100
-    elif preferred:
+    elif pref_skills:
         raw_score = preferred_score * 100
     else:
         raw_score = 0
 
     job_domain = get_role_domain(job.title or "")
     # Detect candidate domain
-    cand_text = " ".join(user_skills.keys()) + " " + (profile.headline or "").lower()
+    cand_text = " ".join(candidate_skills) + " " + (profile.headline or "").lower()
     cand_is_eng = bool(re.search(r"\b(python|javascript|react|c\+\+|fastapi|docker|sql|engineer|developer|software)\b", cand_text))
     if cand_is_eng and job_domain != "engineering":
         fit_score = min(20, max(8, round(raw_score * 0.15)))
@@ -228,12 +310,14 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
         fit_score = round(raw_score)
 
     projects = []
+    req_norm_set = {normalize_skill(s) for s in req_skills}
+    pref_norm_set = {normalize_skill(s) for s in pref_skills}
     for project in entities.get("projects", {}).values():
         if project.get("confirmed_by_user", True):
             p_dict = dict(project) if isinstance(project, dict) else project.model_dump()
             if not p_dict.get("url"):
                 p_dict["url"] = None
-            if _project_matches(p_dict, set(required), set(preferred)):
+            if _project_matches(p_dict, req_norm_set, pref_norm_set):
                 try:
                     p_obj = Project.model_validate(p_dict)
                     projects.append(p_obj)
@@ -262,14 +346,14 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
         fit_score=fit_score,
         recommendation=recommendation,
         recommendation_reason=reason,
-        matched_required_skills=[required[skill] for skill in matched_required],
-        matched_preferred_skills=[preferred[skill] for skill in matched_preferred],
-        missing_required_skills=[required[skill] for skill in missing_required],
-        missing_preferred_skills=[preferred[skill] for skill in missing_preferred],
+        matched_required_skills=matched_required,
+        matched_preferred_skills=matched_preferred,
+        missing_required_skills=missing_required,
+        missing_preferred_skills=missing_preferred,
         relevant_projects=projects,
         learning_opportunities=[
-            *[_learning(required[skill], True) for skill in missing_required],
-            *[_learning(preferred[skill], False) for skill in missing_preferred],
+            *[_learning(s, True) for s in missing_required],
+            *[_learning(s, False) for s in missing_preferred],
         ],
         evidence=evidence,
         model_version="skills-grounded-v1",
