@@ -227,12 +227,18 @@ def analyze_job(user_id: str, job: Job) -> JobIntelligence:
     else:
         fit_score = round(raw_score)
 
-    projects = [
-        Project.model_validate(project)
-        for project in entities["projects"].values()
-        if project.get("confirmed_by_user", True)
-        and _project_matches(project, set(required), set(preferred))
-    ]
+    projects = []
+    for project in entities.get("projects", {}).values():
+        if project.get("confirmed_by_user", True):
+            p_dict = dict(project) if isinstance(project, dict) else project.model_dump()
+            if not p_dict.get("url"):
+                p_dict["url"] = None
+            if _project_matches(p_dict, set(required), set(preferred)):
+                try:
+                    p_obj = Project.model_validate(p_dict)
+                    projects.append(p_obj)
+                except Exception:
+                    pass
     recommendation = "recommended" if fit_score >= 60 else "lower_match"
     if cand_is_eng and job_domain != "engineering":
         reason = f"{fit_score}% fit: This role is in {job_domain.title()}, which diverges from your engineering background."

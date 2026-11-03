@@ -684,7 +684,7 @@ def sync_extracted_entity_to_career_knowledge(
                 or (raw_text.splitlines()[0][:60] if raw_text else "Project"),
                 "description": data.get("description") or raw_text[:500],
                 "technologies": tech_list,
-                "url": data.get("url") or "",
+                "url": (data.get("url") or None) if str(data.get("url", "")).strip() else None,
                 "source_type": "resume",
                 "source_id": document_id,
                 "confirmed_by_user": True,

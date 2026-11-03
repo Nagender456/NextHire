@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class ApplicationStatus(StrEnum):
@@ -112,6 +112,13 @@ class Project(CareerEntity):
     technologies: list[str] = Field(default_factory=list)
     url: HttpUrl | None = None
 
+    @field_validator("url", mode="before")
+    @classmethod
+    def sanitize_url(cls, v: object) -> object:
+        if v == "" or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
+
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
@@ -122,6 +129,13 @@ class ProjectCreate(BaseModel):
     source_id: str | None = None
     confidence: float = Field(default=1.0, ge=0, le=1)
     confirmed_by_user: bool = True
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def sanitize_url(cls, v: object) -> object:
+        if v == "" or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
 
 
 class Experience(CareerEntity):

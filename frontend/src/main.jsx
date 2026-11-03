@@ -2604,7 +2604,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
       .then(([nextSkills, nextProjects, nextCandidates]) => {
         setSkills(nextSkills || []);
         setProjects(nextProjects || []);
-        setCandidates(nextCandidates || []);
+        setCandidates((nextCandidates || []).filter((c) => c.status === "pending"));
         if (onProfileSync) onProfileSync();
       })
       .catch((requestError) => setError(requestError.message));
@@ -2650,7 +2650,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
       })
       .then((entities) => {
         if (entities) {
-          setExtracted(entities);
+          setExtracted(entities.filter((e) => !e.confirmed_by_user));
         }
       })
       .catch(() => {});
@@ -2759,7 +2759,8 @@ function CareerKnowledgeBase({ onProfileSync }) {
     event.preventDefault();
     action(value)
       .then((nextCandidates) => {
-        setCandidates([...candidates, ...(nextCandidates || [])]);
+        const pending = (nextCandidates || []).filter((c) => c.status === "pending");
+        setCandidates((prev) => [...prev, ...pending]);
         clear("");
         refreshKnowledge();
       })
@@ -2769,7 +2770,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
   const reviewCandidate = (candidate, status) => {
     reviewExternalCandidate(candidate.id, status)
       .then((updated) => {
-        setCandidates(candidates.map((item) => item.id === updated.id ? updated : item));
+        setCandidates((prev) => prev.filter((item) => item.id !== (updated?.id || candidate.id)));
         refreshKnowledge();
       })
       .catch((requestError) => setError(requestError.message));
@@ -2780,7 +2781,8 @@ function CareerKnowledgeBase({ onProfileSync }) {
     if (!file) return;
     ingestLinkedInDocument(file)
       .then((nextCandidates) => {
-        setCandidates([...candidates, ...(nextCandidates || [])]);
+        const pending = (nextCandidates || []).filter((c) => c.status === "pending");
+        setCandidates((prev) => [...prev, ...pending]);
         refreshKnowledge();
       })
       .catch((requestError) => setError(requestError.message));
@@ -2800,7 +2802,8 @@ function CareerKnowledgeBase({ onProfileSync }) {
         return listExtractedEntities(nextDocument.id);
       })
       .then((entities) => {
-        setExtracted(entities || []);
+        const pending = (entities || []).filter((e) => !e.confirmed_by_user);
+        setExtracted(pending);
         refreshKnowledge();
         if (onProfileSync) onProfileSync();
         if (!entities || entities.length === 0) {
@@ -2813,8 +2816,8 @@ function CareerKnowledgeBase({ onProfileSync }) {
 
   const review = (entity, confirmed) => {
     reviewExtractedEntity(document.id, entity.id, confirmed)
-      .then((updated) => {
-        setExtracted(extracted.map((item) => item.id === updated.id ? updated : item));
+      .then(() => {
+        setExtracted((prev) => prev.filter((item) => item.id !== entity.id));
         if (confirmed) {
           refreshKnowledge();
         }
@@ -2825,12 +2828,28 @@ function CareerKnowledgeBase({ onProfileSync }) {
   const acceptAllExtracted = () => {
     if (!document || extracted.length === 0) return;
     acceptAllExtractedEntities(document.id)
-      .then((updatedList) => {
-        setExtracted(updatedList);
+      .then(() => {
+        setExtracted([]);
         setChunkNotice("");
         refreshKnowledge();
       })
       .catch((requestError) => setError(requestError.message));
+  };
+
+  const acceptAllSkills = async () => {
+    if (!document || extractedSkills.length === 0) return;
+    try {
+      await Promise.all(
+        extractedSkills.map((entity) =>
+          reviewExtractedEntity(document.id, entity.id, true)
+        )
+      );
+      const skillIds = new Set(extractedSkills.map((s) => s.id));
+      setExtracted((prev) => prev.filter((item) => !skillIds.has(item.id)));
+      refreshKnowledge();
+    } catch (requestError) {
+      setError(requestError.message);
+    }
   };
 
   const handlePrepareChunks = async () => {
@@ -2838,13 +2857,12 @@ function CareerKnowledgeBase({ onProfileSync }) {
     setError("");
     setChunkNotice("");
     try {
-      let currentList = extracted;
-      const hasConfirmed = currentList.some((e) => e.confirmed_by_user);
-      if (!hasConfirmed && currentList.length > 0) {
-        currentList = await Promise.all(
-          currentList.map((e) => reviewExtractedEntity(document.id, e.id, true))
+      if (extracted.length > 0) {
+        await Promise.all(
+          extracted.map((e) => reviewExtractedEntity(document.id, e.id, true))
         );
-        setExtracted(currentList);
+        setExtracted([]);
+        refreshKnowledge();
       }
       const nextChunks = await prepareEmbeddingChunks(document.id);
       setChunks(nextChunks);
@@ -3367,32 +3385,37 @@ function CareerKnowledgeBase({ onProfileSync }) {
                 <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
                 <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600 }}>AI Extracted Findings</h3>
                 <span className="ai-confidence-pill" style={{ background: "rgba(99, 102, 241, 0.12)", color: "var(--colors-primary)", border: "1px solid rgba(99, 102, 241, 0.25)" }}>
-                  ✨ {document.extraction_engine || "AI Analyzed"} ({extracted.length} items)
+                  ✨ {document.extraction_engine || "AI Analyzed"}{extracted.length > 0 ? ` (${extracted.length} pending)` : ""}
                 </span>
               </div>
-              {extracted.length > 0 && (
+              {extracted.length > 0 ? (
                 <div>
-                  {unconfirmedCount > 0 ? (
-                    <button
-                      type="button"
-                      className="primary-button"
-                      style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", padding: "6px 14px" }}
-                      onClick={acceptAllExtracted}
-                    >
-                      <Sparkles size={13} />
-                      Accept All AI Findings ({unconfirmedCount})
-                    </button>
-                  ) : (
-                    <span className="badge badge-success" style={{ color: "#10b981", fontWeight: 600, fontSize: "12px", padding: "4px 8px" }}>
-                      ✓ All Findings Confirmed
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    className="primary-button"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", padding: "6px 14px" }}
+                    onClick={acceptAllExtracted}
+                  >
+                    <Sparkles size={13} />
+                    Accept All AI Findings ({extracted.length})
+                  </button>
                 </div>
+              ) : (
+                <span className="badge badge-success" style={{ color: "#10b981", fontWeight: 600, fontSize: "12px", padding: "4px 8px" }}>
+                  ✓ All Findings Confirmed
+                </span>
               )}
             </div>
 
             {extracted.length === 0 ? (
-              <p className="empty-message">No text sections detected in this document.</p>
+              <div style={{ textAlign: "center", padding: "1.25rem 1rem", color: "var(--colors-slate)" }}>
+                <p style={{ margin: "0 0 4px 0", fontWeight: 600, color: "#10b981", fontSize: "14px" }}>
+                  ✓ All findings reviewed & added to your Career Knowledge Base!
+                </p>
+                <p style={{ margin: 0, fontSize: "12.5px" }}>
+                  Your confirmed skills and career records above are saved and active for job match scoring.
+                </p>
+              </div>
             ) : (
               <>
                 <div className="ai-filter-tabs">
@@ -3452,36 +3475,47 @@ function CareerKnowledgeBase({ onProfileSync }) {
 
                 {showSkillsSection && (
                   <div style={{ marginBottom: "1.25rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
                       <h4 style={{ fontSize: "12px", color: "var(--colors-slate)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
                         Extracted Skills ({extractedSkills.length})
                       </h4>
+                      <button
+                        type="button"
+                        className="button-link"
+                        style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--colors-primary)", fontWeight: 600, padding: 0 }}
+                        onClick={acceptAllSkills}
+                      >
+                        <Check size={13} />
+                        Accept All Skills ({extractedSkills.length})
+                      </button>
                     </div>
                     <div className="ai-skills-grid">
                       {extractedSkills.map((entity) => {
                         const skillName = entity.data?.name || entity.data?.text || "Skill";
                         const category = entity.data?.category || "Technical";
                         const confidence = entity.data?.confidence ? Math.round(entity.data.confidence * 100) : null;
-                        const isAccepted = entity.confirmed_by_user;
                         return (
-                          <div key={entity.id} className={`ai-skill-pill ${isAccepted ? "accepted" : ""}`}>
+                          <div key={entity.id} className="ai-skill-pill">
                             <span>{skillName}</span>
                             {category && <span className="ai-skill-category-tag">{category}</span>}
                             {confidence && <span className="ai-confidence-pill" style={{ padding: "1px 5px", fontSize: "10px" }}>{confidence}%</span>}
-                            {isAccepted ? (
-                              <span title="Confirmed" style={{ display: "inline-flex", color: "#16a34a" }}>
-                                <Check size={13} />
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="ai-skill-action-btn"
-                                title="Accept skill"
-                                onClick={() => review(entity, true)}
-                              >
-                                <Check size={13} />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              className="ai-skill-action-btn"
+                              title="Accept skill"
+                              onClick={() => review(entity, true)}
+                            >
+                              <Check size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="ai-skill-action-btn"
+                              title="Dismiss / Reject skill"
+                              style={{ color: "var(--colors-slate)", marginLeft: "2px" }}
+                              onClick={() => review(entity, false)}
+                            >
+                              <X size={13} />
+                            </button>
                           </div>
                         );
                       })}
@@ -3492,7 +3526,6 @@ function CareerKnowledgeBase({ onProfileSync }) {
                 {cardsToShow.length > 0 && (
                   <div className="entity-list ai-entity-cards-list">
                     {cardsToShow.map((entity) => {
-                      const isAccepted = entity.confirmed_by_user;
                       const typeLabel = (entity.entity_type || "RECORD").toUpperCase();
                       const title = entity.data?.title || entity.data?.name || entity.data?.degree || entity.data?.text?.split("\n")[0] || "Title";
                       const subtitle = entity.data?.company || entity.data?.institution || entity.data?.issuer || "";
@@ -3500,7 +3533,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
                       const desc = entity.data?.description || (entity.data?.text && entity.data.text !== title ? entity.data.text : "");
 
                       return (
-                        <div key={entity.id} className={`ai-entity-card ${isAccepted ? "accepted" : ""}`}>
+                        <div key={entity.id} className="ai-entity-card">
                           <div className="ai-entity-card-header">
                             <div>
                               <div className="ai-entity-title-line">
@@ -3513,20 +3546,12 @@ function CareerKnowledgeBase({ onProfileSync }) {
                               {dates && <span className="ai-entity-meta-dates">{dates}</span>}
                             </div>
                             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                              {isAccepted ? (
-                                <span className="badge badge-success" style={{ color: "#10b981", fontWeight: 600, fontSize: "12px" }}>
-                                  ✓ Confirmed
-                                </span>
-                              ) : (
-                                <>
-                                  <button type="button" className="button-link" onClick={() => review(entity, true)}>
-                                    Accept
-                                  </button>
-                                  <button type="button" className="button-link" style={{ color: "var(--colors-slate)" }} onClick={() => review(entity, false)}>
-                                    Reject
-                                  </button>
-                                </>
-                              )}
+                              <button type="button" className="button-link" onClick={() => review(entity, true)}>
+                                Accept
+                              </button>
+                              <button type="button" className="button-link" style={{ color: "var(--colors-slate)" }} onClick={() => review(entity, false)}>
+                                Reject
+                              </button>
                             </div>
                           </div>
                           {desc && <p className="ai-entity-description">{desc}</p>}
@@ -5333,15 +5358,24 @@ function AnalyticsPage() {
   const [tailoredResume, setTailoredResume] = useState(null);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
+  const loadAllAnalytics = () => {
+    setError(false);
+    setAnalytics(null);
     Promise.all([
-      getAnalytics(),
-      getJobs(),
-      getCompanies(),
+      getAnalytics().catch((err) => {
+        console.error("Analytics fetch error:", err);
+        return null;
+      }),
+      getJobs().catch(() => []),
+      getCompanies().catch(() => []),
       getProfile().catch(() => null),
       listCareerEntities("skills").catch(() => []),
     ])
       .then(([nextAnalytics, nextJobs, nextCompanies, nextProfile, careerSkills]) => {
+        if (!nextAnalytics) {
+          setError(true);
+          return;
+        }
         setAnalytics(nextAnalytics);
         setJobs(nextJobs || []);
         setCompanies(nextCompanies || []);
@@ -5360,7 +5394,14 @@ function AnalyticsPage() {
         }
         setProfile({ ...(nextProfile || {}), skills: deduplicatedSkills });
       })
-      .catch(() => setError(true));
+      .catch((err) => {
+        console.error("AnalyticsPage loading error:", err);
+        setError(true);
+      });
+  };
+
+  useEffect(() => {
+    loadAllAnalytics();
   }, []);
 
   const candidateSkills = useMemo(() => {
@@ -5383,7 +5424,22 @@ function AnalyticsPage() {
     return scoredJobs.filter((j) => j.fitScore >= candidateThreshold);
   }, [scoredJobs, candidateThreshold]);
 
-  if (error) return <p className="error-message" role="alert">Unable to load analytics.</p>;
+  if (error) {
+    return (
+      <div className="analytics-error-container" style={{ padding: "2.5rem 1rem", textAlign: "center" }}>
+        <p className="error-message" role="alert" style={{ marginBottom: "1rem" }}>Unable to load analytics.</p>
+        <button
+          type="button"
+          className="primary-button"
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          onClick={loadAllAnalytics}
+        >
+          <RefreshCw size={14} />
+          <span>Retry Loading Analytics</span>
+        </button>
+      </div>
+    );
+  }
   if (!analytics) return <p className="loading-message" role="status">Loading analytics...</p>;
 
   const matchingCount = matchingJobsList.length;
@@ -5706,7 +5762,7 @@ function AnalyticsPage() {
               <span>Add Companies</span>
             </a>
           </div>
-          {analytics.target_companies.length === 0 ? (
+          {(analytics.target_companies || []).length === 0 ? (
             <div className="companies-empty-state">
               <div className="empty-state-icon-wrap">
                 <Building2 size={22} />
@@ -5724,7 +5780,7 @@ function AnalyticsPage() {
             </div>
           ) : (
             <div className="target-companies-list">
-              {analytics.target_companies.map((company) => (
+              {(analytics.target_companies || []).map((company) => (
                 <div className="target-company-item" key={company}>
                   <div className="company-badge-avatar">
                     {company.charAt(0).toUpperCase()}
