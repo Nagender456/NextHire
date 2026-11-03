@@ -6363,29 +6363,11 @@ function SettingsPage({ user }) {
           <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13.5px", color: "var(--colors-ink)" }}>
             <input
               type="checkbox"
-              checked={notifyMatchingJobs}
-              onChange={(e) => handleToggleNotification("notify_matching_jobs", e.target.checked)}
-              style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
-            />
-            <span>Instant email alerts when a new job posting aligns with your skills (&gt;{minFitScore}% fit)</span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13.5px", color: "var(--colors-ink)" }}>
-            <input
-              type="checkbox"
               checked={notifyDeadlines}
               onChange={(e) => handleToggleNotification("notify_deadlines", e.target.checked)}
               style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
             />
-            <span>Application pipeline reminders (upcoming interviews, post-interview thank you follow-ups)</span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13.5px", color: "var(--colors-ink)" }}>
-            <input
-              type="checkbox"
-              checked={notifyWeeklyDigest}
-              onChange={(e) => handleToggleNotification("notify_weekly_digest", e.target.checked)}
-              style={{ width: "17px", height: "17px", accentColor: "var(--colors-primary)" }}
-            />
-            <span>Weekly market trend digest and skill demand gap report</span>
+            <span>Application pipeline reminders</span>
           </label>
         </div>
       </section>
