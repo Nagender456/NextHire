@@ -196,7 +196,7 @@ function App() {
       : path === "/applications"
       ? "Applications"
       : path === "/admin"
-      ? (user?.role === "ADMIN" ? "Admin Console & Scraper" : "Settings")
+      ? "Settings"
       : "Career Overview";
 
   return (
@@ -223,21 +223,6 @@ function App() {
               </a>
             );
           })}
-          {user?.role === "ADMIN" && (
-            <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--colors-hairline)" }}>
-              <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.08em", color: "var(--colors-steel)", textTransform: "uppercase", paddingLeft: "12px", display: "block", marginBottom: "4px" }}>
-                Admin Operations
-              </span>
-              <a
-                className={path === "/admin" ? "nav-link active" : "nav-link"}
-                href="/admin"
-                style={{ color: "var(--colors-primary)", fontWeight: 600 }}
-              >
-                <ShieldCheck className="nav-icon" size={16} />
-                <span>Admin Console</span>
-              </a>
-            </div>
-          )}
         </nav>
         <div className="sidebar-footer">
           <span>Career workspace assistant</span>
