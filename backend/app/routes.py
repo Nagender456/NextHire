@@ -1017,7 +1017,7 @@ async def seed_sample_jobs(_user: User = Depends(require_user)) -> list[Job]:
 @router.post("/jobs/scrape-naukri", response_model=list[Job])
 async def scrape_naukri_jobs_endpoint(
     payload: NaukriScrapeRequest | None = None,
-    _user: User = Depends(require_user),
+    _admin: User = Depends(require_admin),
 ) -> list[Job]:
     req = payload or NaukriScrapeRequest()
     jobs = await asyncio.to_thread(

@@ -278,7 +278,7 @@ function App() {
           ) : path === "/profile" ? (
             <ProfileEditor user={user} onUpdated={setUser} />
           ) : path === "/jobs" ? (
-            <JobsPage />
+            <JobsPage user={user} />
           ) : path === "/applications" ? (
             <ApplicationsPage />
           ) : path === "/analytics" ? (
@@ -1087,7 +1087,18 @@ function JobIntelligenceModal({ job, onClose }) {
   );
 }
 
-function JobsPage() {
+function JobsPage({ user }) {
+  const [currentUser, setCurrentUser] = useState(user || null);
+
+  useEffect(() => {
+    if (!currentUser) {
+      getCurrentUser()
+        .then(setCurrentUser)
+        .catch(() => {});
+    }
+  }, [user]);
+
+  const isAdmin = (user?.role || currentUser?.role) === "ADMIN";
   const [jobs, setJobs] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [profile, setProfile] = useState(null);
@@ -1388,46 +1399,48 @@ function JobsPage() {
 
       {saveError && <p className="error-message" role="alert">{saveError}</p>}
 
-      {/* Naukri Live Discovery Bar */}
-      <div className="naukri-scrape-banner">
-        <div className="naukri-banner-header">
-          <div className="naukri-badge-tag">
-            <span className="pulse-dot active" />
-            <span>Naukri Live Scraper</span>
+      {/* Naukri Live Discovery Bar - Admin Only */}
+      {isAdmin && (
+        <div className="naukri-scrape-banner">
+          <div className="naukri-banner-header">
+            <div className="naukri-badge-tag">
+              <span className="pulse-dot active" />
+              <span>Naukri Live Scraper</span>
+            </div>
+            <span className="naukri-banner-subtext">Direct real-time job scraping & deduplication via JobSpy (Admin Only)</span>
           </div>
-          <span className="naukri-banner-subtext">Direct real-time job scraping & deduplication via JobSpy</span>
+          <form className="naukri-quick-form" onSubmit={handleTriggerNaukriScrape}>
+            <input
+              type="text"
+              placeholder="Role title (e.g. Software Engineer, React Developer)..."
+              value={naukriRole}
+              onChange={(e) => setNaukriRole(e.target.value)}
+              className="naukri-input"
+            />
+            <input
+              type="text"
+              placeholder="Location (e.g. India, Bengaluru, Remote)..."
+              value={naukriLoc}
+              onChange={(e) => setNaukriLoc(e.target.value)}
+              className="naukri-input location"
+              style={{ maxWidth: "220px" }}
+            />
+            <button
+              type="submit"
+              className="primary-button naukri-scrape-btn"
+              disabled={scrapingNaukri}
+            >
+              <RefreshCw size={13} className={scrapingNaukri ? "spin" : ""} />
+              <span>{scrapingNaukri ? "Scraping Naukri..." : "Scrape Naukri Live"}</span>
+            </button>
+          </form>
+          {naukriNotice && (
+            <div className={`naukri-notice ${naukriNotice.type}`}>
+              {naukriNotice.text}
+            </div>
+          )}
         </div>
-        <form className="naukri-quick-form" onSubmit={handleTriggerNaukriScrape}>
-          <input
-            type="text"
-            placeholder="Role title (e.g. Software Engineer, React Developer)..."
-            value={naukriRole}
-            onChange={(e) => setNaukriRole(e.target.value)}
-            className="naukri-input"
-          />
-          <input
-            type="text"
-            placeholder="Location (e.g. India, Bengaluru, Remote)..."
-            value={naukriLoc}
-            onChange={(e) => setNaukriLoc(e.target.value)}
-            className="naukri-input location"
-            style={{ maxWidth: "220px" }}
-          />
-          <button
-            type="submit"
-            className="primary-button naukri-scrape-btn"
-            disabled={scrapingNaukri}
-          >
-            <RefreshCw size={13} className={scrapingNaukri ? "spin" : ""} />
-            <span>{scrapingNaukri ? "Scraping Naukri..." : "Scrape Naukri Live"}</span>
-          </button>
-        </form>
-        {naukriNotice && (
-          <div className={`naukri-notice ${naukriNotice.type}`}>
-            {naukriNotice.text}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Top Filter & Search Bar */}
       <div className="job-feed-controls">
