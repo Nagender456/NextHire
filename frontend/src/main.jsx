@@ -78,7 +78,7 @@ import {
   BarChart3,
   Settings,
   Briefcase,
-  Sparkles,
+  Target,
   Bookmark,
   Send,
   Calendar,
@@ -738,7 +738,7 @@ function ApplicationNextStepsModal({
                 <div>
                   <div className="next-steps-action-card-header">
                     <div className="next-steps-action-icon">
-                      <Sparkles size={16} />
+                      <FileText size={16} />
                     </div>
                     <h5 className="next-steps-action-title">Tailor Resume for Role</h5>
                   </div>
@@ -830,7 +830,7 @@ function JobIntelligenceModal({ job, onClose }) {
       <div className="ai-modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ai-modal-header">
           <div className="ai-modal-title-row">
-            <Sparkles size={18} className="linear-icon-primary" />
+            <Target size={18} className="linear-icon-primary" />
             <div>
               <h3>Match Breakdown</h3>
               <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
@@ -995,7 +995,7 @@ function JobIntelligenceModal({ job, onClose }) {
                   }}
                   disabled={tailoring}
                 >
-                  <Sparkles size={14} className={tailoring ? "spin" : ""} />
+                  <FileText size={14} className={tailoring ? "spin" : ""} />
                   <span>{tailoring ? "Compiling Tailored Resume..." : "Tailor Resume for this Role"}</span>
                 </button>
               </div>
@@ -1586,7 +1586,7 @@ function JobsPage() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <div className={`ai-match-badge ${scoreClass}`} title="Career Alignment Score">
-                      <Sparkles size={12} />
+                      <Target size={12} />
                       <span>{job.score}% Match</span>
                     </div>
                     <button
@@ -1658,7 +1658,7 @@ function JobsPage() {
                       disabled={tailoringJobId === job.id}
                       title={`Tailor Resume for ${job.title}`}
                     >
-                      <Sparkles size={13} className={tailoringJobId === job.id ? "spin" : ""} />
+                      <FileText size={13} className={tailoringJobId === job.id ? "spin" : ""} />
                       <span>{tailoringJobId === job.id ? "Tailoring..." : "Tailor Resume"}</span>
                     </button>
                     <button
@@ -1666,7 +1666,7 @@ function JobsPage() {
                       onClick={() => inspectJob(job)}
                       aria-label={`Explain match for ${job.title}`}
                     >
-                      <Sparkles size={13} />
+                      <Compass size={13} />
                       <span>Why this role?</span>
                     </button>
                     <a
@@ -3364,7 +3364,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
 
       {analyzingResume && (
         <div className="ai-parsing-banner">
-          <Sparkles size={20} className="spin-icon" style={{ color: "var(--colors-primary)", flexShrink: 0 }} />
+          <RefreshCw size={20} className="spin-icon" style={{ color: "var(--colors-primary)", flexShrink: 0 }} />
           <div>
             <strong>Processing your resume...</strong>
             <p style={{ margin: "2px 0 0 0", fontSize: "13px", color: "var(--colors-slate)" }}>
@@ -3388,7 +3388,7 @@ function CareerKnowledgeBase({ onProfileSync }) {
           <div className="ai-extracted-panel">
             <div className="ai-extracted-header">
               <div className="ai-extracted-title-group">
-                <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
+                <FileText size={16} style={{ color: "var(--colors-primary)" }} />
                 <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600 }}>Extracted Profile Findings</h3>
                 <span className="ai-confidence-pill" style={{ background: "rgba(99, 102, 241, 0.12)", color: "var(--colors-primary)", border: "1px solid rgba(99, 102, 241, 0.25)" }}>
                   Ready for Review{extracted.length > 0 ? ` (${extracted.length} pending)` : ""}
@@ -4043,7 +4043,7 @@ function TailoredResumesSection() {
       {/* Quick Tailor Generator Bar */}
       <div className="linear-widget-panel" style={{ marginTop: "1rem", background: "linear-gradient(135deg, rgba(86, 69, 212, 0.04), rgba(86, 69, 212, 0.01))" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-          <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
+          <FileText size={16} style={{ color: "var(--colors-primary)" }} />
           <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>Tailor Resume For Any Open Role</h3>
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
@@ -4068,8 +4068,8 @@ function TailoredResumesSection() {
             disabled={generating || !selectedJobId}
             style={{ display: "inline-flex", alignItems: "center", gap: "6px", height: "38px" }}
           >
-            <Sparkles size={14} className={generating ? "spin" : ""} />
-            <span>{generating ? "Tailoring with AI..." : "Generate Tailored Resume"}</span>
+            <FileText size={14} className={generating ? "spin" : ""} />
+            <span>{generating ? "Tailoring Resume..." : "Generate Tailored Resume"}</span>
           </button>
         </div>
       </div>
@@ -4456,7 +4456,7 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
       <div className="ai-modal-dialog" style={{ maxWidth: "820px" }} onClick={(e) => e.stopPropagation()}>
         <div className="ai-modal-header">
           <div className="ai-modal-title-row">
-            <Sparkles size={18} className="linear-icon-primary" />
+            <FileText size={18} className="linear-icon-primary" />
             <div>
               <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Tailored Resume · Version v{currentResume.version}</h3>
               <span style={{ fontSize: "12px", color: "var(--colors-steel)" }}>
@@ -4750,7 +4750,7 @@ function TailoredResumeModal({ resume, jobs = [], companies = [], onClose, onApp
                   disabled={savingCustomization}
                   style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 18px", fontSize: "13px" }}
                 >
-                  <Sparkles size={14} className={savingCustomization ? "spin" : ""} />
+                  <Check size={14} className={savingCustomization ? "spin" : ""} />
                   <span>{savingCustomization ? "Saving..." : "Save & Apply Customizations"}</span>
                 </button>
               </div>
@@ -5092,7 +5092,7 @@ function DashboardContent({ dashboard, error, onReload, user }) {
             disabled={syncing}
             title="Sync Career Knowledge Base"
           >
-            <Sparkles size={14} className={syncing ? "spin-icon" : ""} />
+            <RefreshCw size={14} className={syncing ? "spin-icon" : ""} />
             <span>{syncing ? "Syncing..." : "Sync Career Knowledge Base"}</span>
           </button>
           <a className="button-secondary linear-upload-btn" href="/profile">
@@ -5288,7 +5288,7 @@ function DashboardContent({ dashboard, error, onReload, user }) {
 
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <div className={`ai-match-badge ${scoreClass}`} title="Career Alignment Score">
-                        <Sparkles size={11} />
+                        <Target size={11} />
                         <span>{score}% Match</span>
                       </div>
                       <button
@@ -5355,7 +5355,7 @@ function DashboardContent({ dashboard, error, onReload, user }) {
                         disabled={tailoringId === job.id}
                         title="Tailor Resume for this role"
                       >
-                        <Sparkles size={13} className={tailoringId === job.id ? "spin" : ""} />
+                        <FileText size={13} className={tailoringId === job.id ? "spin" : ""} />
                         <span>{tailoringId === job.id ? "Tailoring..." : "Tailor Resume"}</span>
                       </button>
                       <button
@@ -5363,7 +5363,7 @@ function DashboardContent({ dashboard, error, onReload, user }) {
                         onClick={() => setSelectedJobForIntelligence({ ...job, title: cleanedTitle, companyName: companyDetails.name })}
                         aria-label={`Explain match for ${cleanedTitle}`}
                       >
-                        <Sparkles size={13} />
+                        <Compass size={13} />
                         <span>Why this role?</span>
                       </button>
                     </div>
@@ -5556,7 +5556,7 @@ function AnalyticsPage() {
     {
       label: `Matching Jobs (≥${candidateThreshold}% fit)`,
       value: matchingCount,
-      icon: Sparkles,
+      icon: Target,
       trend: matchingCount > 0 ? "High match fit" : "0 fit threshold",
       trendType: matchingCount > 0 ? "positive" : "neutral",
       caption: matchingCount > 0
@@ -5654,7 +5654,7 @@ function AnalyticsPage() {
           <div style={{ marginTop: "1.25rem", padding: "14px 16px", background: "var(--colors-surface)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "6px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Sparkles size={16} className="linear-icon-primary" />
+                <Target size={16} className="linear-icon-primary" />
                 <h4 style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>
                   High-Alignment Matching Roles ({matchingJobsList.length})
                 </h4>
@@ -5743,7 +5743,7 @@ function AnalyticsPage() {
         ) : (
           <div style={{ marginTop: "1.25rem", padding: "16px 18px", background: "var(--colors-surface)", borderRadius: "8px", border: "1px solid var(--colors-hairline)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-              <Sparkles size={16} style={{ color: "var(--colors-primary)" }} />
+              <Target size={16} style={{ color: "var(--colors-primary)" }} />
               <h4 style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>
                 No Roles Currently Reach Your {candidateThreshold}% Match Threshold
               </h4>
@@ -6247,7 +6247,7 @@ function SettingsPage({ user }) {
       <section className="linear-widget-panel">
         <div className="widget-header">
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Sparkles size={16} className="linear-icon-primary" />
+            <SlidersHorizontal size={16} className="linear-icon-primary" />
             <h3 className="widget-title">Job Matching & Resume Tailoring Parameters</h3>
           </div>
           <span className="widget-tag">Algorithmic Tuning</span>
@@ -6676,7 +6676,7 @@ function AdminPage() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
               <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "rgba(59, 130, 246, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#2563eb" }}>
-                <Sparkles size={14} />
+                <Globe size={14} />
               </div>
               <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--colors-ink)" }}>
                 JobSpy · Naukri Live Job Ingestion
