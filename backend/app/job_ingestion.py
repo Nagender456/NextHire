@@ -411,6 +411,83 @@ class GenericCareerAdapter:
         return verified_jobs
 
 
+
+def is_company_match(target_name: str, scraped_name: str) -> bool:
+    """Strictly determine if a scraped company name matches the target company."""
+    if not target_name or not scraped_name:
+        return False
+    t = target_name.strip().lower()
+    s = scraped_name.strip().lower()
+    if t == s:
+        return True
+
+    t_clean = re.sub(r"[^\w\s]", " ", t)
+    s_clean = re.sub(r"[^\w\s]", " ", s)
+
+    t_words = [w for w in t_clean.split() if w]
+    s_words = [w for w in s_clean.split() if w]
+    if not t_words or not s_words:
+        return False
+
+    # Acronym matching (e.g. TCS <-> Tata Consultancy Services, AWS <-> Amazon Web Services)
+    if len(t_words) == 1 and 2 <= len(t_words[0]) <= 5:
+        if t_words[0] == "".join(w[0] for w in s_words):
+            return True
+    if len(s_words) == 1 and 2 <= len(s_words[0]) <= 5:
+        if s_words[0] == "".join(w[0] for w in t_words):
+            return True
+
+    allowed_suffixes = {
+        "pvt", "private", "ltd", "limited", "inc", "incorporated", "corp", "corporation",
+        "llc", "llp", "co", "company", "holdings", "holding", "group", "enterprises",
+        "india", "apac", "us", "usa", "uk", "global", "international",
+        "operations", "center", "centre", "development", "labs", "r", "d", "rnd",
+        "software", "systems", "technologies", "technology", "tech", "solutions", "services",
+        "platform", "platforms",
+    }
+
+    t_core = [w for w in t_words if w not in allowed_suffixes] or t_words
+    s_core = [w for w in s_words if w not in allowed_suffixes] or s_words
+
+    if t_core == s_core:
+        return True
+
+    if len(t_core) == 1:
+        brand = t_core[0]
+        if s_core == [brand]:
+            return True
+        return False
+
+    if set(t_core) == set(s_core):
+        return True
+
+    if set(t_core).issubset(set(s_core)) and len(s_core) <= len(t_core) + 1:
+        return set(s_core).issubset(set(t_words))
+
+    return False
+
+
+def is_job_url_matching_company(company_name: str, url: str) -> bool:
+    """Verify that the job URL slug strictly corresponds to the company."""
+    if not company_name or not url:
+        return False
+    url_low = url.lower()
+    if "company-nexthire" in url_low or company_name.lower() in ("nexthire", "next hire"):
+        return True
+
+    brand = company_name.lower().split()[0]
+    if not (f"-{brand}-" in url_low or f"-{brand}" in url_low or f"/{brand}" in url_low or f"={brand}" in url_low):
+        return False
+
+    # Check false positives where brand is a prefix of an unrelated company
+    if brand == "apple" and "apple-electroniks" in url_low:
+        return False
+    if brand == "meta" and any(bad in url_low for bad in ["meta-infotech", "meta-resources", "meta-i-tech", "maskoid"]):
+        return False
+
+    return True
+
+
 def _jobs_from_jobspy_df(df, company: Company | None = None) -> list[Job]:
     if df is None or df.empty:
         return []
@@ -427,13 +504,20 @@ def _jobs_from_jobspy_df(df, company: Company | None = None) -> list[Job]:
             continue
 
         row_comp_name = str(row.get("company") or "").strip()
-        if row_comp_name.lower() in ("nan", "none"):
-            row_comp_name = company.name if company else "Verified Employer"
 
         if company is not None:
+            # Strictly verify that the scraped employer matches the target company
+            if not row_comp_name or row_comp_name.lower() in ("nan", "none"):
+                continue
+            if not is_company_match(company.name, row_comp_name):
+                continue
+            if not is_job_url_matching_company(company.name, job_url):
+                continue
             comp_id = company.id
             display_comp_name = company.name
         else:
+            if row_comp_name.lower() in ("nan", "none") or not row_comp_name:
+                row_comp_name = "Verified Employer"
             found_company = next(
                 (c for c in ingestion_store.companies.values() if c.name.lower() == row_comp_name.lower()),
                 None,
@@ -552,12 +636,12 @@ class NaukriJobSpyAdapter(GenericCareerAdapter):
             df = scrape_jobs(
                 site_name=["naukri"],
                 search_term=company.name,
-                results_wanted=12,
+                results_wanted=35,
             )
             if df is not None and not df.empty:
                 jobs = _jobs_from_jobspy_df(df, company)
                 if jobs:
-                    return jobs[:12]
+                    return jobs[:20]
         except Exception as exc:
             logger.warning("JobSpy Naukri scraper error for %s: %s", company.name, exc)
 
@@ -699,6 +783,32 @@ class JobIngestionStore:
 
         return deleted_count + len(to_remove)
 
+    def purge_mismatched_company_jobs(self) -> int:
+        """Permanently remove jobs mistakenly assigned to a company that belong to an unrelated employer or agency."""
+        purged_ids: list[str] = []
+        for job_id, job in list(self.jobs.items()):
+            company = self.companies.get(job.company_id)
+            if not company:
+                continue
+            if not is_job_url_matching_company(company.name, str(job.url)):
+                purged_ids.append(job_id)
+                self.jobs.pop(job_id, None)
+
+        if self._mongo_db is not None and purged_ids:
+            try:
+                self._mongo_db.ingested_jobs.delete_many({"id": {"$in": purged_ids}})
+                if "jobs" in self._mongo_db.list_collection_names():
+                    self._mongo_db.jobs.delete_many({"id": {"$in": purged_ids}})
+            except Exception as exc:
+                logger.warning("Error purging mismatched company jobs from MongoDB: %s", exc)
+
+        from app.repositories import repository, InMemoryRepository
+        if isinstance(repository, InMemoryRepository):
+            repository.jobs = [j for j in repository.jobs if j.id not in set(purged_ids)]
+
+        logger.info("Purged %d mismatched company jobs.", len(purged_ids))
+        return len(purged_ids)
+
     def _load_from_mongo(self) -> None:
         if self._mongo_db is None:
             return
@@ -733,9 +843,18 @@ class JobIngestionStore:
                 ext = str(j_data.get("external_job_id") or "").lower()
                 if "naukri" not in u and "naukri" not in su and "naukri" not in d and "naukri" not in ext:
                     continue
+
+                c_id = str(j_data.get("company_id") or "")
+                comp = self.companies.get(c_id)
+                if comp and not is_job_url_matching_company(comp.name, u):
+                    try:
+                        self._mongo_db.ingested_jobs.delete_one({"id": j_data.get("id")})
+                    except Exception:
+                        pass
+                    continue
+
                 job = Job.model_validate(j_data)
                 clean_t = re.sub(r"^\d+\s+", "", job.title).strip()
-                comp = self.companies.get(job.company_id)
                 company_name = comp.name if comp else ""
                 if company_name:
                     clean_t = re.sub(r"\s*[-|·•]\s*" + re.escape(company_name) + r".*$", "", clean_t, flags=re.IGNORECASE).strip()
@@ -1078,18 +1197,27 @@ class JobIngestionStore:
             closed = 0
             for job_id, job in list(self.jobs.items()):
                 if job.company_id == company_id and job_id not in seen_ids:
-                    closed += job.status != "closed"
-                    self.jobs[job_id] = job.model_copy(
-                        update={"status": "closed", "last_seen_at": datetime.now(UTC)}
-                    )
-                    if self._mongo_db is not None:
-                        try:
-                            self._mongo_db.ingested_jobs.update_one(
-                                {"id": job_id},
-                                {"$set": {"status": "closed", "last_seen_at": datetime.now(UTC).isoformat()}},
-                            )
-                        except Exception:
-                            pass
+                    # If the existing job was a mismatched third-party employer, purge it completely
+                    if not is_job_url_matching_company(company.name, str(job.url)):
+                        self.jobs.pop(job_id, None)
+                        if self._mongo_db is not None:
+                            try:
+                                self._mongo_db.ingested_jobs.delete_one({"id": job_id})
+                            except Exception:
+                                pass
+                    else:
+                        closed += job.status != "closed"
+                        self.jobs[job_id] = job.model_copy(
+                            update={"status": "closed", "last_seen_at": datetime.now(UTC)}
+                        )
+                        if self._mongo_db is not None:
+                            try:
+                                self._mongo_db.ingested_jobs.update_one(
+                                    {"id": job_id},
+                                    {"$set": {"status": "closed", "last_seen_at": datetime.now(UTC).isoformat()}},
+                                )
+                            except Exception:
+                                pass
             self.companies[company_id] = company.model_copy(
                 update={
                     "last_synced_at": datetime.now(UTC),
